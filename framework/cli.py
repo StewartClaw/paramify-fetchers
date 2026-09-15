@@ -305,6 +305,8 @@ def _human_upload_printer(noun: str = "file", log_name: str = "upload_log.json")
                 ref = f"  assessment={ev['assessment_id']}"
             else:
                 ref = ""
+            if ev.get("channel"):
+                ref += f"  channel={ev['channel']}"
             reason = ev.get("reason") or ev.get("error")
             suffix = f"  {reason}" if reason else ""
             typer.echo(
@@ -394,6 +396,8 @@ def _upload_stage(
         for warning in preflight.get("warnings") or []:
             _err(f"  {style.mark('WARN')}  {warning}")
         typer.echo(f"Uploading to {preflight['base_url_label']}: {preflight['base_url']}")
+        if preflight.get("config_path"):
+            typer.echo(f"Uploader config: {preflight['config_path']}")
 
     try:
         summary = upload_fn(

@@ -1031,6 +1031,26 @@ def run(
 # Upload — Paramify evidence uploader facade (powers CLI + TUI)
 # --------------------------------------------------------------------------- #
 
+UPLOAD_CONFIG_NAME = "upload.yaml"
+
+
+def default_upload_config(root: Path) -> Optional[Path]:
+    """The uploader config used when a caller names none: ``<root>/upload.yaml``.
+
+    The TUI has no way to pass a path, and until it had a default it could reach
+    no config at all — no base_url, no overrides, and no channel. Resolving the
+    same file for every stage is also what keeps the evidence upload, the issue
+    intake, and the scripts sync reading one set of overrides, rather than the
+    CLI and the TUI disagreeing about which evidence set a fetcher belongs to.
+    """
+    path = Path(root) / UPLOAD_CONFIG_NAME
+    return path if path.is_file() else None
+
+
+def _upload_config(root: Path, config_path: Optional[Path]) -> Optional[Path]:
+    return Path(config_path) if config_path else default_upload_config(root)
+
+
 def _load_paramify_uploader(root: Path):
     """Load the source-tree uploader without requiring uploaders/ to be packaged."""
     path = Path(root) / "uploaders" / "paramify_evidence" / "uploader.py"
@@ -1141,6 +1161,7 @@ def upload_preflight(
     """Inspect upload readiness without making Paramify API calls."""
     uploader = _load_paramify_uploader(root)
     uploader.load_dotenv()
+    config_path = _upload_config(root, config_path)
     config = uploader.load_config(str(config_path)) if config_path else {}
     paramify_cfg = config.get("paramify") or {}
     base_url, base_url_source = resolve_base_url(paramify_cfg.get("base_url"))
@@ -1170,6 +1191,7 @@ def upload_preflight(
         "base_url": base_url,
         "base_url_source": base_url_source,
         "base_url_label": describe_base_url(base_url),
+        "config_path": str(config_path) if config_path else None,
         "file_count": file_count,
         "token_present": token_present,
         "token_source": token_source,
@@ -1193,6 +1215,7 @@ def upload_run(
     for completed batches, even when some files failed.
     """
     uploader = _load_paramify_uploader(root)
+    config_path = _upload_config(root, config_path)
     config = uploader.load_config(str(config_path)) if config_path else {}
     return uploader.upload_run(
         Path(run_dir),
@@ -1237,6 +1260,7 @@ def issues_upload_preflight(
     """
     uploader = _load_paramify_issues_uploader(root)
     uploader.load_dotenv()
+    config_path = _upload_config(root, config_path)
     config = uploader.load_config(str(config_path)) if config_path else {}
     paramify_cfg = config.get("paramify") or {}
     base_url, base_url_source = resolve_base_url(paramify_cfg.get("base_url"))
@@ -1292,6 +1316,7 @@ def issues_upload_preflight(
         "base_url": base_url,
         "base_url_source": base_url_source,
         "base_url_label": describe_base_url(base_url),
+        "config_path": str(config_path) if config_path else None,
         "file_count": file_count,
         "missing_assessment": missing_assessment,
         "warnings": warnings,
@@ -1317,6 +1342,7 @@ def issues_upload_run(
     upload_run, so a front-end renders both with one code path.
     """
     uploader = _load_paramify_issues_uploader(root)
+    config_path = _upload_config(root, config_path)
     config = uploader.load_config(str(config_path)) if config_path else {}
     return uploader.upload_run(
         Path(run_dir),
@@ -1358,6 +1384,7 @@ def scripts_sync_preflight(
     """
     uploader = _load_paramify_scripts_uploader(root)
     uploader.load_dotenv()
+    config_path = _upload_config(root, config_path)
     config = uploader.load_config(str(config_path)) if config_path else {}
     paramify_cfg = config.get("paramify") or {}
     base_url, base_url_source = resolve_base_url(paramify_cfg.get("base_url"))
@@ -1416,6 +1443,7 @@ def scripts_sync(
     fetchers); ``None`` syncs every discovered fetcher.
     """
     uploader = _load_paramify_scripts_uploader(root)
+    config_path = _upload_config(root, config_path)
     config = uploader.load_config(str(config_path)) if config_path else {}
     return uploader.sync_scripts(
         root,

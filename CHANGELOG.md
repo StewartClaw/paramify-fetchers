@@ -12,6 +12,21 @@ schemas and the `paramify` CLI — not the internal code.
 
 ### Added
 
+- **Upload artifacts through a channel.** Where an evidence set has channels, the
+  uploader now sends `channelId` with the artifact: an artifact uploaded outside a
+  configured channel does not count toward validation on the solution capability.
+  A set with exactly one channel routes through it with no configuration at all; a
+  set with none uploads unchanneled as before. Pick between several with
+  `paramify.stack` (matched against each channel's stack) or
+  `overrides.<fetcher>.channel_reference_id`. Ambiguity errors that file rather
+  than guessing, and an unknown stack fails the run before the first upload. The
+  channel is recorded per file in `upload_log.json` — the API does not report it
+  back on an artifact. See [`docs/uploader_design.md`](docs/uploader_design.md).
+- **A default uploader config at `./upload.yaml`.** Every upload stage falls back
+  to it when no `--config` is given, which is how the TUI — which passes no path —
+  reaches base_url, overrides, and channel settings at all. Both front-ends now
+  name the config in use before a batch runs.
+
 - **A central `validators/` registry.** A validator is now a first-class,
   deduplicated object — one file at `validators/<category>/<key>.yaml`, checked
   against the new `framework/schemas/validator_schema.json`. It carries the
