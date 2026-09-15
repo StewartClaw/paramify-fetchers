@@ -322,6 +322,7 @@ class ManifestPage(ButtonRowNav, Vertical):
         if self._manifest is None or value == (self._run().get("output_dir") or ""):
             return  # blur fires on every focus change; only a real change commits
         api.set_output_dir(self._manifest, value)
+        self._autosave()
         self.notify("Output dir updated.")
         self.rebuild()
 
@@ -372,6 +373,7 @@ class ManifestPage(ButtonRowNav, Vertical):
                             api.set_secret(m, name, s["name"], s["env"])
                             wired = True
             self._selected = names[-1]
+            self._autosave()
             self.rebuild()
             n = len(names)
             noun = "fetcher" if n == 1 else "fetchers"
@@ -425,6 +427,7 @@ class ManifestPage(ButtonRowNav, Vertical):
                 api.set_fetcher_config(m, use, k, v)
             for name, env in (result.get("secrets") or {}).items():
                 api.set_secret(m, use, name, env)
+            self._autosave()
             self.rebuild()
             self.notify(f"Updated {use}.")
 
@@ -506,6 +509,7 @@ class ManifestPage(ButtonRowNav, Vertical):
                 result.get("values") or {},
                 secret_env=(result.get("secrets") or None),
             )
+            self._autosave()
             self.rebuild()
             self.notify(f"Updated target {index} of {use}.")
 
@@ -527,6 +531,7 @@ class ManifestPage(ButtonRowNav, Vertical):
         def done(ok: bool) -> None:
             if ok:
                 api.remove_target(m, use, index)
+                self._autosave()
                 self.rebuild()
                 self.notify(f"Removed target {index} from {use}.")
 
@@ -555,6 +560,7 @@ class ManifestPage(ButtonRowNav, Vertical):
                 return
             values = result.get("values") or {}
             api.add_target(m, use, values, secret_env=(result.get("secrets") or None))
+            self._autosave()
             self.rebuild()
             # api.validate() does not check required target fields, so warn here:
             # an empty/invalid required field would otherwise be dropped silently.
@@ -619,6 +625,7 @@ class ManifestPage(ButtonRowNav, Vertical):
             if chosen_id is None:
                 return
             api.set_assessment(m, use, by_id[chosen_id])
+            self._autosave()
             self.rebuild()
             self.notify(
                 f"{use} → {api.assessment_display_name(by_id[chosen_id])}"
@@ -642,10 +649,36 @@ class ManifestPage(ButtonRowNav, Vertical):
             if ok:
                 api.remove_entry(m, use)
                 self._selected = None
+                self._autosave()
                 self.rebuild()
                 self.notify(f"Removed {use}.")
 
         self.app.push_screen(ConfirmModal(f"Remove '{use}' from the manifest?"), done)
+
+    def _autosave(self) -> None:
+        """Write the manifest through after a mutation.
+
+        Edits used to live in memory until 's', so quitting — or a crash, or
+        simply not knowing the key — discarded them with nothing on screen to say
+        the file and the view had diverged. Saving on every mutation removes the
+        divergence instead of trying to surface it.
+
+        A save that cannot happen keeps the change in memory and says so: a
+        manifest the schema refuses or a path that will not take a write is worth
+        reporting, but not worth throwing away the edit that triggered it. 's'
+        retries once the cause is fixed.
+        """
+        m = self._manifest
+        if m is None:
+            return
+        try:
+            api.dump_manifest(m, self.app.manifest_path, self.app.root_path)
+        except Exception as exc:  # noqa: BLE001 — every failure keeps the edit
+            self.notify(
+                f"Change not saved: {exc} — fix, then press 's'.",
+                severity="error",
+                timeout=12,
+            )
 
     def action_save(self) -> None:
         m = self._manifest

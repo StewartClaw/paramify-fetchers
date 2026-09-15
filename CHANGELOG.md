@@ -35,7 +35,6 @@ schemas and the `paramify` CLI — not the internal code.
   to it when no `--config` is given, which is how the TUI — which passes no path —
   reaches base_url and the per-fetcher overrides at all. Both front-ends now name
   the config in use before a batch runs.
-
 - **A central `validators/` registry.** A validator is now a first-class,
   deduplicated object — one file at `validators/<category>/<key>.yaml`, checked
   against the new `framework/schemas/validator_schema.json`. It carries the
@@ -55,6 +54,16 @@ schemas and the `paramify` CLI — not the internal code.
   to the shared registry.
 
 ### Changed
+
+- **The TUI saves manifest edits as they are made.** Adding a fetcher, editing an
+  entry, adding / editing / removing a target, picking an assessment, removing an
+  entry, and changing the output dir all write the file immediately. Edits used
+  to live in memory until `s`, with nothing on screen to say the file and the
+  view had diverged — so quitting, or not knowing the key, discarded the work.
+  `s` still saves on demand, which is also how a write that failed is retried: a
+  save that cannot happen reports why and keeps the edit rather than losing it
+  along with the file write.
+
 
 - **`paramify validators check`** — runs the behaviour cases in
   `validators/_cases/` through the real ECMAScript engine
