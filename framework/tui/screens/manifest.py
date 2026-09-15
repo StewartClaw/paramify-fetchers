@@ -50,13 +50,13 @@ def _target_summary(target: dict) -> str:
 
 class ManifestPage(ButtonRowNav, Vertical):
     HINTS = [
-        ("a", "add"), ("e", "edit"), ("x", "remove"), ("t", "targets"),
+        ("a", "add"), ("e", "entry"), ("x", "remove"), ("t", "targets"),
         ("A", "assessment"), ("s", "save"), ("v", "validate"), ("p", "preview"),
     ]
 
     BINDINGS = [
         Binding("a", "add_fetcher", "Add"),
-        Binding("e", "edit_entry", "Edit"),
+        Binding("e", "edit_entry", "Entry"),
         Binding("x", "remove_entry", "Remove"),
         Binding("t", "edit_targets", "Targets"),
         Binding("A", "pick_assessment", "Assessment"),
@@ -415,7 +415,7 @@ class ManifestPage(ButtonRowNav, Vertical):
             for s in d.get("secrets", []) if not s.get("per_target")
         ]
         if not config_specs and not secret_specs:
-            hint = " — press 't' to add targets" if d.get("supports_targets") else ""
+            hint = " — press 't' to edit its targets" if d.get("supports_targets") else ""
             self.notify(f"{use} has no entry-level config or secrets to edit{hint}.")
             return
         groups = {"config": config_specs, "secrets": secret_specs}
@@ -431,12 +431,20 @@ class ManifestPage(ButtonRowNav, Vertical):
             self.rebuild()
             self.notify(f"Updated {use}.")
 
+        # Entry level only. 104 of the 138 fanout fetchers declare no entry
+        # config, so for those this form is nothing but secrets — indistinguishable
+        # from the target editor failing to open unless it says where targets live.
+        # Short enough to survive the card width — a subtitle that clips takes the
+        # targets pointer with it, which is the half that answers "why is this
+        # form only secrets?". The ENV-VAR rule is also on the secrets group label.
+        subtitle = "Secrets take the ENV VAR NAME, not the value."
+        if d.get("supports_targets"):
+            # Leads, and the secrets note is trimmed to fit beside it: the card
+            # clips rather than wraps, and this is the half that answers "why is
+            # this form only secrets?". The ENV-VAR rule is also on the group label.
+            subtitle = "Targets: press 't'.   ·   Secrets take the ENV VAR NAME."
         self.app.push_screen(
-            FormModal(
-                f"Edit {use}",
-                groups,
-                subtitle="Secret fields take the env var NAME (e.g. KNOWBE4_API_KEY), not the credential.",
-            ),
+            FormModal(f"Edit {use} — entry config and secrets", groups, subtitle=subtitle),
             done,
         )
 

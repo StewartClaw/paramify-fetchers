@@ -215,3 +215,26 @@ def test_escape_closes_the_editor_back_to_the_page(tmp_path):
 
     # back to the workspace, with no modal left on the stack
     assert _run(body, manifest) == "WorkspaceScreen"
+
+
+def test_the_entry_editor_says_where_targets_are_edited(tmp_path):
+    """`e` on the page edits the ENTRY, not a target. 104 of the 138 fanout
+    fetchers declare no entry config, so that form is nothing but secrets —
+    indistinguishable from the target editor failing to open unless the form
+    itself says where targets live."""
+    manifest, name, fields = _fanout_manifest(tmp_path)
+
+    async def body(app, pilot):
+        await pilot.press("2")
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+        assert isinstance(app.screen, FormModal)
+        return app.screen._title, app.screen._subtitle
+
+    title, subtitle = _run(body, manifest)
+    assert "entry config and secrets" in title
+    assert "'t'" in subtitle
+    # short enough to survive the card width — a clipped subtitle takes the
+    # pointer with it, which is the half that matters here
+    assert len(subtitle) <= 66
