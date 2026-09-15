@@ -76,22 +76,16 @@ correctness requirement, not a convenience.
 
 Channels are created in the app. The API exposes them read-only on the evidence
 record (`channels[]`: `id`, `referenceId`, `owner`, `stackId`) and accepts a
-`channelId` on artifact upload, so the uploader can only *choose among* the
-channels a set already has. `find_evidence_set` therefore returns the whole
-record rather than a bare id — the channels ride along on a call that was made
-anyway. `resolve_channel` then picks, in order:
+`channelId` on artifact upload, so the uploader can only *use* what a set
+already has. `find_evidence_set` therefore returns the whole record rather than
+a bare id — the channels ride along on a call that was made anyway — and
+`resolve_channel` applies one rule: **a set with a channel uploads through it, a
+set with none uploads unchanneled.** Neither needs any configuration.
 
-1. `overrides.<fetcher_name>.channel_reference_id` — an outright choice;
-2. the channel whose `stackId` matches `paramify.stack` (resolved to an id once
-   per run via `GET /stacks`);
-3. the set's only channel, when it has exactly one.
-
-A set with **no** channels uploads unchanneled, exactly as before channels
-existed. Anything ambiguous — two channels and no config, a stack with two
-channels on one set, a `channel_reference_id` that is not on the set — errors
-that file and carries on with the batch, because guessing produces an upload that
-looks fine and validates as nothing. A `paramify.stack` that is not in the
-workspace fails the whole run before the first file.
+More than one channel on a set is out of scope for now and errors that file,
+carrying on with the batch. Guessing produces an upload that looks fine and
+validates as nothing, so there is nothing to gain by picking one before the
+rules for choosing exist.
 
 Two API limits shape this:
 

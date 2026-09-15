@@ -63,11 +63,10 @@ class FakeClient:
     """Drop-in for ParamifyClient at the upload_run level: lets us drive
     duplicate/partial-failure behavior without any HTTP."""
 
-    def __init__(self, *, fail_files=(), existing=(), channels=(), stacks=None):
+    def __init__(self, *, fail_files=(), existing=(), channels=()):
         self.fail_files = set(fail_files)
         self.existing = set(existing)
         self.channels = list(channels)
-        self._stacks = {} if stacks is None else dict(stacks)
         self.uploaded = []
         self.meta = {}
 
@@ -77,9 +76,6 @@ class FakeClient:
             "referenceId": es["reference_id"],
             "channels": self.channels,
         }
-
-    def stacks(self):
-        return self._stacks
 
     def artifact_exists(self, evidence_id, filename, run_id):
         return filename in self.existing
@@ -296,8 +292,8 @@ def test_empty_run_dir_raises(tmp_path):
 # resolve_channel — which channel an artifact is uploaded through
 #
 # An artifact uploaded outside a configured channel is invisible to validation on
-# the solution capability, so the rule is: never guess between two channels, and
-# only upload unchanneled when the set genuinely has none.
+# the solution capability, so a set that has a channel must use it — and a set
+# with more than one is refused rather than guessed at.
 # --------------------------------------------------------------------------- #
 
 def test_no_channels_uploads_unchanneled():
@@ -305,52 +301,19 @@ def test_no_channels_uploads_unchanneled():
     assert uploader.resolve_channel(None) is None
 
 
-def test_single_channel_is_picked_without_any_config():
+def test_the_sets_channel_is_used_without_any_config():
     ch = channel("CHN-001")
     assert uploader.resolve_channel([ch]) == ch
 
 
-def test_several_channels_without_config_is_an_error():
-    with pytest.raises(uploader.ChannelError, match="CHN-001, CHN-002"):
+def test_several_channels_is_refused_not_guessed():
+    with pytest.raises(uploader.ChannelError, match="not supported yet"):
         uploader.resolve_channel([channel("CHN-001"), channel("CHN-002")])
 
 
-def test_reference_id_override_selects_its_channel():
-    a, b = channel("CHN-001"), channel("CHN-002")
-    assert uploader.resolve_channel([a, b], channel_reference_id="CHN-002") == b
-
-
-def test_unknown_reference_id_is_an_error_not_a_fallback():
-    with pytest.raises(uploader.ChannelError, match="CHN-999 is not on"):
-        uploader.resolve_channel([channel("CHN-001")], channel_reference_id="CHN-999")
-
-
-def test_stack_selects_its_channel():
-    prod = channel("CHN-001", stack="stack-prod")
-    dev = channel("CHN-002", stack="stack-dev")
-    assert uploader.resolve_channel([prod, dev], stack_id="stack-dev", stack_name="Dev") == dev
-
-
-def test_stack_with_no_channel_on_the_set_is_an_error():
-    with pytest.raises(uploader.ChannelError, match="no channel for stack 'Dev'"):
-        uploader.resolve_channel([channel("CHN-001", stack="stack-prod")],
-                                 stack_id="stack-dev", stack_name="Dev")
-
-
-def test_stack_with_two_channels_asks_for_a_reference_id():
-    chans = [channel("CHN-001", stack="s"), channel("CHN-002", stack="s")]
-    with pytest.raises(uploader.ChannelError, match="channel_reference_id"):
-        uploader.resolve_channel(chans, stack_id="s", stack_name="Prod")
-
-
-def test_reference_id_override_beats_the_configured_stack():
-    """The per-fetcher escape hatch is what resolves a stack-level ambiguity, so
-    it has to win over the stack rather than be checked after it."""
-    a = channel("CHN-001", stack="stack-prod")
-    b = channel("CHN-002", stack="stack-dev")
-    got = uploader.resolve_channel([a, b], channel_reference_id="CHN-002",
-                                   stack_id="stack-prod", stack_name="Prod")
-    assert got == b
+def test_the_refusal_names_the_channels_it_found():
+    with pytest.raises(uploader.ChannelError, match="CHN-001, CHN-002"):
+        uploader.resolve_channel([channel("CHN-001"), channel("CHN-002")])
 
 
 # --------------------------------------------------------------------------- #
@@ -385,51 +348,7 @@ def test_no_channel_sends_no_channel_id(tmp_path, monkeypatch):
     assert "channelId" not in fake.meta["a.json"]
 
 
-def test_configured_stack_routes_the_artifact(tmp_path, monkeypatch):
-    run_dir = tmp_path / "run-x"
-    run_dir.mkdir()
-    write_evidence(run_dir, "a.json")
-    fake = FakeClient(
-        channels=[channel("CHN-001", stack="s-prod"), channel("CHN-002", stack="s-dev")],
-        stacks={"Production": "s-prod", "Dev": "s-dev"},
-    )
-    monkeypatch.setattr(uploader, "ParamifyClient", lambda token, base_url: fake)
-
-    uploader.upload_run(run_dir, token="tok", base_url="https://app.example.com/api/v0",
-                        config={"paramify": {"stack": "Dev"}})
-
-    assert fake.meta["a.json"]["channelId"] == "ch-CHN-002"
-
-
-def test_unknown_stack_fails_the_whole_run(tmp_path, monkeypatch):
-    """A typo'd stack must not fall back to unchanneled uploads — that would push
-    a whole run past validation silently."""
-    run_dir = tmp_path / "run-x"
-    run_dir.mkdir()
-    write_evidence(run_dir, "a.json")
-    fake = FakeClient(channels=[channel("CHN-001")], stacks={"Production": "s-prod"})
-    monkeypatch.setattr(uploader, "ParamifyClient", lambda token, base_url: fake)
-
-    with pytest.raises(ValueError, match="not found in this workspace"):
-        uploader.upload_run(run_dir, token="tok", base_url="https://app.example.com/api/v0",
-                            config={"paramify": {"stack": "Prodction"}})
-    assert fake.uploaded == []
-
-
-def test_per_fetcher_override_picks_the_channel(tmp_path, monkeypatch):
-    run_dir = tmp_path / "run-x"
-    run_dir.mkdir()
-    write_evidence(run_dir, "a.json")     # written by fetcher "f"
-    fake = FakeClient(channels=[channel("CHN-001"), channel("CHN-002")])
-    monkeypatch.setattr(uploader, "ParamifyClient", lambda token, base_url: fake)
-
-    uploader.upload_run(run_dir, token="tok", base_url="https://app.example.com/api/v0",
-                        config={"overrides": {"f": {"channel_reference_id": "CHN-002"}}})
-
-    assert fake.meta["a.json"]["channelId"] == "ch-CHN-002"
-
-
-def test_ambiguous_channel_errors_that_file_and_continues(tmp_path, monkeypatch):
+def test_an_unroutable_set_errors_that_file_and_continues(tmp_path, monkeypatch):
     run_dir = tmp_path / "run-x"
     run_dir.mkdir()
     write_evidence(run_dir, "a.json", reference_id="EVD-1")
@@ -442,19 +361,6 @@ def test_ambiguous_channel_errors_that_file_and_continues(tmp_path, monkeypatch)
     assert summary["ok"] is False and summary["errors"] == 2 and summary["uploaded"] == 0
     assert fake.uploaded == []
     assert "channel" in summary["results"][0]["reason"]
-
-
-def test_stacks_are_fetched_once_and_only_when_configured():
-    calls = []
-
-    def get_handler(url, params):
-        calls.append(url)
-        return FakeResponse(200, [{"id": "s-1", "name": "Production"}])
-
-    c = _client_with_session(get_handler=get_handler)
-    assert c.stacks() == {"Production": "s-1"}
-    assert c.stacks() == {"Production": "s-1"}
-    assert len(calls) == 1      # cached; one lookup per run, not per file
 
 
 def test_channel_id_rides_in_the_artifact_part_of_the_multipart_body():

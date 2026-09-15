@@ -80,7 +80,6 @@ class ParamifyClient:
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers.update({"Authorization": f"Bearer {token}"})
-        self._stacks: Optional[Dict[str, str]] = None
 
     def find_evidence_set(self, reference_id: str) -> Optional[Dict]:
         """Return the evidence-set record for a reference_id, or None. Server-side filter.
@@ -118,21 +117,6 @@ class ParamifyClient:
 
     def get_or_create_evidence_set(self, es: Dict) -> Optional[Dict]:
         return self.find_evidence_set(es["reference_id"]) or self.create_evidence_set(es)
-
-    def stacks(self) -> Dict[str, str]:
-        """Stack name -> id for the whole workspace; fetched at most once.
-
-        Only read when the config names a stack: a channel carries its stackId
-        but not the stack's name, so the configured name has to be resolved
-        against this list before any channel can be matched.
-        """
-        if self._stacks is None:
-            r = self.session.get(f"{self.base_url}/stacks", timeout=self.timeout)
-            r.raise_for_status()
-            self._stacks = {
-                s["name"]: s["id"] for s in (r.json() or []) if s.get("name") and s.get("id")
-            }
-        return self._stacks
 
     def artifact_exists(self, evidence_id: str, original_file_name: str, run_id: Optional[str]) -> bool:
         """True if an artifact with this filename AND run_id already exists on the set.
@@ -220,52 +204,28 @@ def _channel_labels(channels: List[Dict]) -> str:
 
 
 def resolve_channel(
-    channels: Optional[List[Dict]],
-    *,
-    channel_reference_id: Optional[str] = None,
-    stack_id: Optional[str] = None,
-    stack_name: Optional[str] = None,
-    where: str = "this evidence set",
+    channels: Optional[List[Dict]], *, where: str = "this evidence set"
 ) -> Optional[Dict]:
-    """Pick the channel to upload an artifact through, or None for unchanneled.
+    """The channel to upload an artifact through, or None for unchanneled.
 
     Channels are created in the Paramify app; the API only lets us choose among
-    the ones a set already has. Where a customer has configured channels, an
-    artifact uploaded outside one is invisible to validation on the solution
-    capability — so an ambiguous choice raises instead of guessing, and only a
-    set with no channels at all uploads unchanneled.
+    the ones a set already has. Where a customer has configured one, an artifact
+    uploaded outside it is invisible to validation on the solution capability —
+    so a set that has a channel uses it, and only a set with none at all uploads
+    unchanneled. Neither case needs any configuration.
 
-    In priority: an explicit per-fetcher channel_reference_id, then the channel
-    belonging to the configured stack, then the set's one channel if it has
-    exactly one. The last rule is what lets the common case need no config.
+    More than one channel on a set is out of scope for now, and raises rather
+    than picking: choosing wrong looks exactly like succeeding, so there is
+    nothing to be gained by guessing before the multi-channel rules exist.
     """
     channels = list(channels or [])
-    if channel_reference_id:
-        for ch in channels:
-            if ch.get("referenceId") == channel_reference_id:
-                return ch
-        raise ChannelError(
-            f"channel {channel_reference_id} is not on {where} (has: {_channel_labels(channels)})"
-        )
-    if stack_id:
-        matches = [ch for ch in channels if ch.get("stackId") == stack_id]
-        if len(matches) == 1:
-            return matches[0]
-        if not matches:
-            raise ChannelError(
-                f"no channel for stack {stack_name!r} on {where} (has: {_channel_labels(channels)})"
-            )
-        raise ChannelError(
-            f"stack {stack_name!r} has {len(matches)} channels on {where} "
-            f"({_channel_labels(matches)}); name one with overrides.<fetcher>.channel_reference_id"
-        )
     if len(channels) == 1:
         return channels[0]
     if not channels:
         return None
     raise ChannelError(
-        f"{where} has {len(channels)} channels ({_channel_labels(channels)}) and none is "
-        "configured; set paramify.stack or overrides.<fetcher>.channel_reference_id"
+        f"{where} has {len(channels)} channels ({_channel_labels(channels)}); "
+        "uploading through more than one channel is not supported yet"
     )
 
 
@@ -358,7 +318,6 @@ def upload_run(
         raise ValueError(url_error)
 
     overrides = config.get("overrides") or {}
-    stack_name = paramify_cfg.get("stack")
     skip_failed = bool(config.get("skip_failed", False))
     artifact_payload = config.get("artifact_payload", "envelope")
     if artifact_payload not in ("envelope", "payload"):
@@ -392,23 +351,6 @@ def upload_run(
     })
 
     client = None if dry_run else ParamifyClient(token, base_url)
-
-    # One lookup for the whole run, and a hard failure if the name is unknown: a
-    # typo'd stack would otherwise resolve no channel on every set, and quietly
-    # uploading a whole run outside its channels is the failure we are here to
-    # prevent. Dry-run stays API-call-free, so it resolves no channels at all.
-    stack_id = None
-    if stack_name and client is not None:
-        stacks = client.stacks()
-        stack_id = stacks.get(stack_name)
-        if not stack_id:
-            msg = (
-                f"stack {stack_name!r} not found in this workspace "
-                f"(have: {', '.join(sorted(stacks)) or 'none'})"
-            )
-            logger.error(msg)
-            raise ValueError(msg)
-
     results: List[Dict] = []
     uploaded = skipped_dup = skipped_failed = errors = seen = 0
 
@@ -474,14 +416,11 @@ def upload_run(
             try:
                 channel = resolve_channel(
                     record.get("channels"),
-                    channel_reference_id=override_for(metadata, overrides).get("channel_reference_id"),
-                    stack_id=stack_id,
-                    stack_name=stack_name,
                     where=f"evidence set {es['reference_id']}",
                 )
             except ChannelError as e:
-                # Before the dedup check on purpose: a broken channel config is
-                # worth reporting on every file it affects, not just new ones.
+                # Before the dedup check on purpose: an unroutable set is worth
+                # reporting on every file it affects, not just new ones.
                 logger.error("%s: %s", path.name, e)
                 errors += 1
                 add_result({
@@ -591,7 +530,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Upload enveloped evidence to Paramify")
     parser.add_argument("run_dir", nargs="?", help="Run directory to upload (default: latest under --output-dir)")
     parser.add_argument("--output-dir", default="./evidence", help="Base dir to find the latest run in (default ./evidence)")
-    parser.add_argument("--config", help="Uploader config YAML (base_url, stack, overrides, skip_failed, artifact_payload)")
+    parser.add_argument("--config", help="Uploader config YAML (base_url, overrides, skip_failed, artifact_payload)")
     parser.add_argument("--dry-run", action="store_true", help="Resolve and report what would upload; no API calls")
     args = parser.parse_args(argv)
 

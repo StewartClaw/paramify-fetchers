@@ -1,9 +1,8 @@
 # Example uploader config (customer-side; optional).
 #
 # Run without it and the uploader uses the defaults baked into each fetcher's
-# evidence_set block. Use it to point at a different Paramify host, route
-# artifacts through a channel, override a referenceId for your program, or
-# change upload behavior.
+# evidence_set block. Use it to point at a different Paramify host, override a
+# referenceId for your program, or change upload behavior.
 #
 # Copy it to ./upload.yaml at the repo root and every stage picks it up with no
 # flag — the TUI included. `paramify upload --config <path>` overrides that.
@@ -14,13 +13,9 @@
 paramify:
   base_url: https://app.paramify.com/api/v0   # optional; default shown
 
-  # Which stack's channel to upload artifacts through. Only needed when your
-  # evidence sets have channels on more than one stack: a set with exactly one
-  # channel routes through it automatically, and a set with none uploads
-  # unchanneled. Channels are created in the Paramify app — the API only lets
-  # the uploader choose among the ones a set already has.
-  #
-  # stack: Production
+# Channels need no configuration: an evidence set that has one is uploaded
+# through it, and one with none uploads unchanneled. Channels are created in the
+# Paramify app — the API only lets the uploader use what a set already has.
 
 # Per-fetcher overrides. Key = fetcher name (metadata.fetcher_name). Override
 # just reference_id to map a fetcher to a different evidence set in your program;
@@ -28,12 +23,6 @@ paramify:
 overrides:
   okta_phishing_resistant_mfa:
     reference_id: CUST-OKTA-MFA-01
-
-    # Name a channel outright when a stack has more than one on this set. Wins
-    # over paramify.stack; the uploader errors rather than guessing, because an
-    # artifact uploaded outside a configured channel does not count toward
-    # validation on the solution capability.
-    # channel_reference_id: CHN-001
 
 # Upload a partial-evidence file even when the run's status was "failed"?
 # false = upload anyway (status recorded on the artifact note); true = skip them.
