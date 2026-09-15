@@ -11,7 +11,10 @@ Per evidence file the uploader:
   1. reads the envelope `metadata.evidence_set` (skips with a warning if absent),
   2. applies any customer override (reference_id / name / instructions),
   3. get-or-creates the evidence set by reference_id,
-  4. attaches the evidence as an artifact (idempotent: skips if an artifact with
+  4. picks the channel to upload through, where the set has any (see
+     resolve_channel — artifacts uploaded outside a configured channel do not
+     count toward the solution capability),
+  5. attaches the evidence as an artifact (idempotent: skips if an artifact with
      the same filename + run_id already exists on the set).
 
 Auth: PARAMIFY_UPLOAD_API_TOKEN (source-agnostic env — .env, secret manager, CI).
@@ -61,6 +64,14 @@ class ParamifyError(RuntimeError):
     pass
 
 
+class ChannelError(ParamifyError):
+    """No single channel could be resolved for an evidence set.
+
+    Its own type because it is a per-file config problem, not an API failure:
+    upload_run reports the file and carries on with the batch.
+    """
+
+
 class ParamifyClient:
     """Thin client over the Paramify REST API v0 evidence endpoints."""
 
@@ -70,8 +81,13 @@ class ParamifyClient:
         self.session = requests.Session()
         self.session.headers.update({"Authorization": f"Bearer {token}"})
 
-    def find_evidence_set(self, reference_id: str) -> Optional[str]:
-        """Return the evidence-set id for a reference_id, or None. Server-side filter."""
+    def find_evidence_set(self, reference_id: str) -> Optional[Dict]:
+        """Return the evidence-set record for a reference_id, or None. Server-side filter.
+
+        The whole record rather than just its id: the response carries the set's
+        `channels[]`, which is what channel routing resolves against, and this
+        call is made either way.
+        """
         r = self.session.get(
             f"{self.base_url}/evidence",
             params={"referenceId": reference_id},
@@ -80,10 +96,10 @@ class ParamifyClient:
         r.raise_for_status()
         for ev in r.json().get("evidences", []):
             if ev.get("referenceId") == reference_id:
-                return ev.get("id")
+                return ev
         return None
 
-    def create_evidence_set(self, es: Dict) -> Optional[str]:
+    def create_evidence_set(self, es: Dict) -> Optional[Dict]:
         """Create the evidence set; on 'already exists' fall back to find (idempotent)."""
         body = {"referenceId": es["reference_id"], "name": es["name"], "automated": True}
         if es.get("description"):
@@ -92,14 +108,14 @@ class ParamifyClient:
             body["instructions"] = es["instructions"]
         r = self.session.post(f"{self.base_url}/evidence", json=body, timeout=self.timeout)
         if r.status_code in (200, 201):
-            return r.json().get("id")
+            return r.json()
         if r.status_code == 400 and "already exists" in r.text.lower():
             return self.find_evidence_set(es["reference_id"])
         raise ParamifyError(
             f"create evidence set {es['reference_id']} failed (HTTP {r.status_code}): {r.text[:300]}"
         )
 
-    def get_or_create_evidence_set(self, es: Dict) -> Optional[str]:
+    def get_or_create_evidence_set(self, es: Dict) -> Optional[Dict]:
         return self.find_evidence_set(es["reference_id"]) or self.create_evidence_set(es)
 
     def artifact_exists(self, evidence_id: str, original_file_name: str, run_id: Optional[str]) -> bool:
@@ -165,17 +181,52 @@ def iter_evidence_files(run_dir: Path):
         yield p
 
 
+def override_for(metadata: Dict, overrides: Dict) -> Dict:
+    """The customer override block for the fetcher that produced this evidence."""
+    return overrides.get(metadata.get("fetcher_name"), {}) or {}
+
+
 def resolve_evidence_set(metadata: Dict, overrides: Dict) -> Optional[Dict]:
     """Merge the envelope's evidence_set with any per-fetcher customer override."""
     es = metadata.get("evidence_set")
     if not es:
         return None
-    ov = overrides.get(metadata.get("fetcher_name"), {}) or {}
+    ov = override_for(metadata, overrides)
     resolved = dict(es)
     for key in ("reference_id", "name", "instructions", "description"):
         if key in ov:
             resolved[key] = ov[key]
     return resolved
+
+
+def _channel_labels(channels: List[Dict]) -> str:
+    return ", ".join(ch.get("referenceId") or ch.get("id") or "?" for ch in channels) or "none"
+
+
+def resolve_channel(
+    channels: Optional[List[Dict]], *, where: str = "this evidence set"
+) -> Optional[Dict]:
+    """The channel to upload an artifact through, or None for unchanneled.
+
+    Channels are created in the Paramify app; the API only lets us choose among
+    the ones a set already has. Where a customer has configured one, an artifact
+    uploaded outside it is invisible to validation on the solution capability —
+    so a set that has a channel uses it, and only a set with none at all uploads
+    unchanneled. Neither case needs any configuration.
+
+    More than one channel on a set is out of scope for now, and raises rather
+    than picking: choosing wrong looks exactly like succeeding, so there is
+    nothing to be gained by guessing before the multi-channel rules exist.
+    """
+    channels = list(channels or [])
+    if len(channels) == 1:
+        return channels[0]
+    if not channels:
+        return None
+    raise ChannelError(
+        f"{where} has {len(channels)} channels ({_channel_labels(channels)}); "
+        "uploading through more than one channel is not supported yet"
+    )
 
 
 # Target fields preferred as the single identifying suffix in an artifact title.
@@ -186,7 +237,7 @@ def resolve_evidence_set(metadata: Dict, overrides: Dict) -> Optional[Dict]:
 _TITLE_KEYS = ("program_name", "project_id", "name", "id", "region", "cluster", "host", "bucket", "account_id")
 
 
-def build_artifact_meta(metadata: Dict, es_name: str) -> Dict:
+def build_artifact_meta(metadata: Dict, es_name: str, channel_id: Optional[str] = None) -> Dict:
     target = metadata.get("target")
     title = es_name
     if target:
@@ -204,11 +255,14 @@ def build_artifact_meta(metadata: Dict, es_name: str) -> Dict:
     ]
     if target:
         note_parts.append(f"target={json.dumps(target, separators=(',', ':'))}")
-    return {
+    meta = {
         "title": title,
         "note": "; ".join(note_parts),
         "effectiveDate": metadata.get("collected_at") or _utc_now(),
     }
+    if channel_id:
+        meta["channelId"] = channel_id
+    return meta
 
 
 def artifact_content(envelope: Dict, mode: str) -> bytes:
@@ -340,22 +394,44 @@ def upload_run(
                 add_result({"file": path.name, "outcome": "skipped_failed", "reference_id": es["reference_id"]})
                 continue
 
-            meta_art = build_artifact_meta(metadata, es["name"])
-
             if dry_run:
+                # Title only — the channel needs the set's record, and a dry-run
+                # makes no API calls at all.
                 logger.info(
                     "would upload %s → set %s (%s) as %r",
-                    path.name, es["reference_id"], es["name"], meta_art["title"],
+                    path.name, es["reference_id"], es["name"],
+                    build_artifact_meta(metadata, es["name"])["title"],
                 )
                 add_result({"file": path.name, "outcome": "would_upload", "reference_id": es["reference_id"]})
                 continue
 
-            evidence_id = client.get_or_create_evidence_set(es)
+            record = client.get_or_create_evidence_set(es)
+            evidence_id = (record or {}).get("id")
             if not evidence_id:
                 logger.error("%s: could not get or create evidence set %s", path.name, es["reference_id"])
                 errors += 1
                 add_result({"file": path.name, "outcome": "error", "reference_id": es["reference_id"]})
                 continue
+
+            try:
+                channel = resolve_channel(
+                    record.get("channels"),
+                    where=f"evidence set {es['reference_id']}",
+                )
+            except ChannelError as e:
+                # Before the dedup check on purpose: an unroutable set is worth
+                # reporting on every file it affects, not just new ones.
+                logger.error("%s: %s", path.name, e)
+                errors += 1
+                add_result({
+                    "file": path.name,
+                    "outcome": "error",
+                    "reference_id": es["reference_id"],
+                    "evidence_id": evidence_id,
+                    "reason": str(e),
+                })
+                continue
+
             if client.artifact_exists(evidence_id, path.name, metadata.get("run_id")):
                 logger.info("%s: artifact already uploaded for this run; skipping", path.name)
                 skipped_dup += 1
@@ -367,15 +443,29 @@ def upload_run(
                 })
                 continue
             content = artifact_content(envelope, artifact_payload)
+            meta_art = build_artifact_meta(
+                metadata, es["name"], channel_id=channel["id"] if channel else None
+            )
             art = client.upload_artifact(evidence_id, path.name, content, meta_art)
             uploaded += 1
-            logger.info("uploaded %s → set %s artifact %s", path.name, es["reference_id"], art.get("id"))
+            logger.info(
+                "uploaded %s → set %s%s artifact %s",
+                path.name,
+                es["reference_id"],
+                f" via {channel.get('referenceId') or channel['id']}" if channel else "",
+                art.get("id"),
+            )
+            # The channel is logged because it cannot be read back: an artifact
+            # response carries no channelId, so upload_log.json is the only
+            # record of where each artifact was sent.
             add_result({
                 "file": path.name,
                 "outcome": "uploaded",
                 "reference_id": es["reference_id"],
                 "evidence_id": evidence_id,
                 "artifact_id": art.get("id"),
+                "channel": (channel.get("referenceId") if channel else None),
+                "channel_id": (channel.get("id") if channel else None),
             })
         except Exception as e:
             logger.error("%s: upload failed: %s", path.name, e)

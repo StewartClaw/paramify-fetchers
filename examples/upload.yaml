@@ -4,11 +4,18 @@
 # evidence_set block. Use it to point at a different Paramify host, override a
 # referenceId for your program, or change upload behavior.
 #
+# Copy it to ./upload.yaml at the repo root and every stage picks it up with no
+# flag — the TUI included. `paramify upload --config <path>` overrides that.
+#
 # Token comes from the PARAMIFY_UPLOAD_API_TOKEN env var (any source: .env,
 # secret manager, CI). It is never put in this file.
 
 paramify:
   base_url: https://app.paramify.com/api/v0   # optional; default shown
+
+# Channels need no configuration: an evidence set that has one is uploaded
+# through it, and one with none uploads unchanneled. Channels are created in the
+# Paramify app — the API only lets the uploader use what a set already has.
 
 # Per-fetcher overrides. Key = fetcher name (metadata.fetcher_name). Override
 # just reference_id to map a fetcher to a different evidence set in your program;

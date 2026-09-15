@@ -63,13 +63,19 @@ class FakeClient:
     """Drop-in for ParamifyClient at the upload_run level: lets us drive
     duplicate/partial-failure behavior without any HTTP."""
 
-    def __init__(self, *, fail_files=(), existing=()):
+    def __init__(self, *, fail_files=(), existing=(), channels=()):
         self.fail_files = set(fail_files)
         self.existing = set(existing)
+        self.channels = list(channels)
         self.uploaded = []
+        self.meta = {}
 
     def get_or_create_evidence_set(self, es):
-        return "ev-" + es["reference_id"]
+        return {
+            "id": "ev-" + es["reference_id"],
+            "referenceId": es["reference_id"],
+            "channels": self.channels,
+        }
 
     def artifact_exists(self, evidence_id, filename, run_id):
         return filename in self.existing
@@ -78,7 +84,13 @@ class FakeClient:
         if filename in self.fail_files:
             raise uploader.ParamifyError(f"HTTP 500 on {filename}")
         self.uploaded.append(filename)
+        self.meta[filename] = meta
         return {"id": "art-" + filename}
+
+
+def channel(ref, *, stack="stack-1", id_=None):
+    return {"id": id_ or f"ch-{ref}", "referenceId": ref, "stackId": stack,
+            "owner": {"type": "team", "name": "Team 1"}}
 
 
 def write_evidence(run_dir, name, *, reference_id="EVD-1", set_name="Set",
@@ -114,12 +126,15 @@ def _client_with_session(get_handler=None, post_handler=None):
     return c
 
 
-def test_find_returns_id_for_exact_reference_match():
+def test_find_returns_record_for_exact_reference_match():
     c = _client_with_session(get_handler=lambda url, params: FakeResponse(200, {"evidences": [
         {"id": "ev-other", "referenceId": "OTHER"},
-        {"id": "ev-9", "referenceId": "EVD-9"},
+        {"id": "ev-9", "referenceId": "EVD-9", "channels": [channel("CHN-001")]},
     ]}))
-    assert c.find_evidence_set("EVD-9") == "ev-9"
+    found = c.find_evidence_set("EVD-9")
+    # The whole record, not the bare id — the channels ride along on this call.
+    assert found["id"] == "ev-9"
+    assert found["channels"] == [channel("CHN-001")]
 
 
 def test_get_or_create_uses_existing_and_never_posts():
@@ -133,7 +148,7 @@ def test_get_or_create_uses_existing_and_never_posts():
         get_handler=lambda url, params: FakeResponse(200, {"evidences": [{"id": "ev-1", "referenceId": "EVD-1"}]}),
         post_handler=post_handler,
     )
-    assert c.get_or_create_evidence_set({"reference_id": "EVD-1", "name": "n"}) == "ev-1"
+    assert c.get_or_create_evidence_set({"reference_id": "EVD-1", "name": "n"})["id"] == "ev-1"
     assert posts == []   # found it; must not have tried to create
 
 
@@ -145,7 +160,7 @@ def test_create_on_400_already_exists_falls_back_to_find():
         get_handler=lambda url, params: gets.pop(0),
         post_handler=lambda url, j, f: FakeResponse(400, text="Evidence already exists"),
     )
-    assert c.get_or_create_evidence_set({"reference_id": "EVD-1", "name": "n"}) == "ev-7"
+    assert c.get_or_create_evidence_set({"reference_id": "EVD-1", "name": "n"})["id"] == "ev-7"
 
 
 def test_create_other_400_raises():
@@ -271,3 +286,99 @@ def test_empty_run_dir_raises(tmp_path):
     run_dir.mkdir()
     with pytest.raises(ValueError, match="no evidence files"):
         uploader.upload_run(run_dir, token="tok", base_url="https://app.example.com/api/v0", dry_run=True)
+
+
+# --------------------------------------------------------------------------- #
+# resolve_channel — which channel an artifact is uploaded through
+#
+# An artifact uploaded outside a configured channel is invisible to validation on
+# the solution capability, so a set that has a channel must use it — and a set
+# with more than one is refused rather than guessed at.
+# --------------------------------------------------------------------------- #
+
+def test_no_channels_uploads_unchanneled():
+    assert uploader.resolve_channel([]) is None
+    assert uploader.resolve_channel(None) is None
+
+
+def test_the_sets_channel_is_used_without_any_config():
+    ch = channel("CHN-001")
+    assert uploader.resolve_channel([ch]) == ch
+
+
+def test_several_channels_is_refused_not_guessed():
+    with pytest.raises(uploader.ChannelError, match="not supported yet"):
+        uploader.resolve_channel([channel("CHN-001"), channel("CHN-002")])
+
+
+def test_the_refusal_names_the_channels_it_found():
+    with pytest.raises(uploader.ChannelError, match="CHN-001, CHN-002"):
+        uploader.resolve_channel([channel("CHN-001"), channel("CHN-002")])
+
+
+# --------------------------------------------------------------------------- #
+# upload_run — the channel reaches the artifact metadata and the log
+# --------------------------------------------------------------------------- #
+
+def test_channel_id_is_sent_on_the_artifact(tmp_path, monkeypatch):
+    run_dir = tmp_path / "run-x"
+    run_dir.mkdir()
+    write_evidence(run_dir, "a.json")
+    fake = FakeClient(channels=[channel("CHN-001")])
+    monkeypatch.setattr(uploader, "ParamifyClient", lambda token, base_url: fake)
+
+    summary = uploader.upload_run(run_dir, token="tok", base_url="https://app.example.com/api/v0")
+
+    assert fake.meta["a.json"]["channelId"] == "ch-CHN-001"
+    assert summary["results"][0]["channel"] == "CHN-001"
+
+
+def test_no_channel_sends_no_channel_id(tmp_path, monkeypatch):
+    """A set with no channels uploads exactly as it did before: the key is absent,
+    not null — the API treats them the same, but an absent key is what every
+    customer without channels has been sending all along."""
+    run_dir = tmp_path / "run-x"
+    run_dir.mkdir()
+    write_evidence(run_dir, "a.json")
+    fake = FakeClient()
+    monkeypatch.setattr(uploader, "ParamifyClient", lambda token, base_url: fake)
+
+    uploader.upload_run(run_dir, token="tok", base_url="https://app.example.com/api/v0")
+
+    assert "channelId" not in fake.meta["a.json"]
+
+
+def test_an_unroutable_set_errors_that_file_and_continues(tmp_path, monkeypatch):
+    run_dir = tmp_path / "run-x"
+    run_dir.mkdir()
+    write_evidence(run_dir, "a.json", reference_id="EVD-1")
+    write_evidence(run_dir, "b.json", reference_id="EVD-1")
+    fake = FakeClient(channels=[channel("CHN-001"), channel("CHN-002")])
+    monkeypatch.setattr(uploader, "ParamifyClient", lambda token, base_url: fake)
+
+    summary = uploader.upload_run(run_dir, token="tok", base_url="https://app.example.com/api/v0")
+
+    assert summary["ok"] is False and summary["errors"] == 2 and summary["uploaded"] == 0
+    assert fake.uploaded == []
+    assert "channel" in summary["results"][0]["reason"]
+
+
+def test_channel_id_rides_in_the_artifact_part_of_the_multipart_body():
+    """The channel is only ever seen on the wire: it goes in the `artifact` JSON
+    part, and no artifact response echoes it back. FakeClient can't catch a
+    regression here because it never builds the request."""
+    sent = {}
+
+    def post_handler(url, j, files):
+        sent["url"] = url
+        sent["artifact"] = json.loads(files["artifact"][1])
+        return FakeResponse(201, {"id": "art-1"})
+
+    c = _client_with_session(post_handler=post_handler)
+    meta = uploader.build_artifact_meta(
+        {"fetcher_name": "f", "run_id": "R", "status": "success"}, "Set", channel_id="ch-1"
+    )
+    c.upload_artifact("ev-1", "a.json", b"{}", meta)
+
+    assert sent["url"].endswith("/evidence/ev-1/artifacts/upload")
+    assert sent["artifact"]["channelId"] == "ch-1"

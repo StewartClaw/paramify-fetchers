@@ -194,6 +194,13 @@ class UploadPage(ButtonRowNav, Vertical):
 
         self._preflight = preflight
         table.add_row("Paramify API", preflight["base_url"])
+        # Which config the upload will run on — base_url, overrides, and the
+        # stack that picks a channel all come from it, and the page takes no
+        # path, so naming it is the only way to see that it was found.
+        table.add_row(
+            "uploader config",
+            preflight.get("config_path") or Text("none (built-in defaults)", style="dim"),
+        )
         table.add_row("API token", palette.pill("present", "ok") if preflight["token_present"] else palette.pill("missing", "fail"))
         table.add_row("upload files", str(preflight["file_count"]))
         if preflight["ok"]:
@@ -498,6 +505,8 @@ class UploadPage(ButtonRowNav, Vertical):
                 ref = f"  assessment={ev.get('assessment_id')}"
             else:
                 ref = ""
+            if ev.get("channel"):
+                ref += f"  channel={ev.get('channel')}"
             reason = ev.get("reason") or ev.get("error")
             suffix = f"  {reason}" if reason else ""
             log.write(Text(f"  [{icon}] {ev.get('file', '?')}  {outcome}{ref}{suffix}", style=style))

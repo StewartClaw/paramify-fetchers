@@ -43,7 +43,10 @@ All three share the same operational contract:
   is ever sent, so the bearer token can't leak over plaintext. `localhost` is the
   only exception (local testing).
 - **`--dry-run` / `--config` / `--json`** — preview read-only, point at a config,
-  or emit a machine-readable summary.
+  or emit a machine-readable summary. With no `--config`, every stage falls back
+  to `./upload.yaml` at the repo root if it exists — which is how the TUI, which
+  passes no path, reaches a config at all. One default for all three stages is
+  also what stops the CLI and the TUI reading different overrides.
 
 ## The evidence-set identity model (shared)
 
@@ -63,6 +66,37 @@ report goes to an assessment, and its identity model is described below.)
   *same* overrides, which is what keeps evidence and scripts on the same set.
 - Control / solution-capability / validator linkage is **out of scope** and stays
   Paramify-side. The `evidence_set` block deliberately does not carry it.
+
+### Channels
+
+A customer can put **channels** on an evidence set — one per stack, each owned by
+a user or a team. Where they have, an artifact uploaded *outside* a channel is
+invisible to validation on the solution capability, so picking the right one is a
+correctness requirement, not a convenience.
+
+Channels are created in the app. The API exposes them read-only on the evidence
+record (`channels[]`: `id`, `referenceId`, `owner`, `stackId`) and accepts a
+`channelId` on artifact upload, so the uploader can only *use* what a set
+already has. `find_evidence_set` therefore returns the whole record rather than
+a bare id — the channels ride along on a call that was made anyway — and
+`resolve_channel` applies one rule: **a set with a channel uploads through it, a
+set with none uploads unchanneled.** Neither needs any configuration.
+
+More than one channel on a set is out of scope for now and errors that file,
+carrying on with the batch. Guessing produces an upload that looks fine and
+validates as nothing, so there is nothing to gain by picking one before the
+rules for choosing exist.
+
+Two API limits shape this:
+
+- **`ArtifactResponse` carries no `channelId`.** Where an artifact went cannot be
+  read back, so `upload_log.json` records the channel per file as the only
+  durable record, and the filename + `run_id` dedup in `artifact_exists` stays
+  channel-blind — re-uploading one run into a second channel would be skipped as
+  a duplicate.
+- **`POST /evidence` takes no stack or channel.** A set the uploader creates
+  itself comes back with no channels and nothing can attach one; it uploads
+  unchanneled until someone adds a channel in the app.
 
 ## `paramify_evidence` — attach evidence to sets
 
