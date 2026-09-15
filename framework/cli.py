@@ -1366,6 +1366,38 @@ def manifest_add_target(
     _save_and_report(m, path, root, json_out)
 
 
+@manifest_app.command("set-target")
+def manifest_set_target(
+    fetcher: str = typer.Argument(..., help="Fanout fetcher name"),
+    index: int = typer.Argument(..., help="Zero-based index of the target to replace"),
+    values: Optional[List[str]] = typer.Argument(None, help="target field key=value pairs"),
+    secret: Optional[List[str]] = typer.Option(None, "--secret", help="per_target secret name=ENV_VAR (repeatable)"),
+    file: str = typer.Option(_DEFAULT_MANIFEST, "-f", "--file", help="Manifest path"),
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON"),
+):
+    """Replace the fanout target at the given index.
+
+    A replace, not a merge: pass every field the target should end up with. Its
+    per-target secrets are kept unless --secret is given.
+    """
+    root = api.find_repo_root()
+    path = _resolve_manifest_arg(root, file, json_out)
+    m = _read_for_edit(path, json_out)
+    vals = {}
+    for kv in (values or []):
+        k, raw = _parse_kv(kv, path, json_out)
+        vals[k] = _coerce_or_fail(raw, _target_field_type(root, fetcher, k), k, path, json_out)
+    secret_env = {}
+    for sv in (secret or []):
+        k, v = _parse_kv(sv, path, json_out)
+        secret_env[k] = v
+    try:
+        api.set_target(m, fetcher, index, vals, secret_env or None)
+    except IndexError as exc:
+        _fail(path, str(exc), json_out)
+    _save_and_report(m, path, root, json_out)
+
+
 @manifest_app.command("remove-target")
 def manifest_remove_target(
     fetcher: str = typer.Argument(..., help="Fanout fetcher name"),

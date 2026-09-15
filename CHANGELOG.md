@@ -12,6 +12,17 @@ schemas and the `paramify` CLI — not the internal code.
 
 ### Added
 
+- **A fanout target editor in the TUI** (`t` on the Manifest tab). A fanout
+  fetcher runs once per target, so its targets are the run plan — but the page
+  showed only how many there were, and there was no way to change one: fixing a
+  typo'd account id meant removing the target and retyping every field. `t` now
+  opens the fetcher's targets as a table, with `a` add, `e` edit, and `x` remove
+  on the highlighted row. Fields come from the fetcher's `target_schema`, so the
+  form is whatever that fetcher actually takes, per-target secrets included.
+- **`paramify manifest set-target <fetcher> <index> k=v …`** — the CLI half of
+  the editor. A replace rather than a merge, so a field cleared in the form is
+  actually cleared; the target's per-target secrets are preserved unless
+  `--secret` is passed.
 - **Upload artifacts through the evidence set's channel.** Where a set has one,
   the uploader now sends `channelId` with the artifact: an artifact uploaded
   outside a configured channel does not count toward validation on the solution

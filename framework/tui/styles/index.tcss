@@ -341,6 +341,22 @@ ModalScreen {
     max-height: 100%;
 }
 
+/* Targets editor: the table fills the wide card, with the count and the key
+   legend pinned under it. */
+#targets-table {
+    height: 1fr;
+    margin-top: 1;
+}
+
+#targets-count {
+    color: $text-muted;
+    padding-top: 1;
+}
+
+#targets-keys {
+    color: $text-muted;
+}
+
 #preview-text {
     width: 1fr;
 }

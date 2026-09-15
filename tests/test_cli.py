@@ -345,6 +345,7 @@ API_TO_CLI = {
     "set_output_dir": "manifest set-output-dir",
     "remove_entry": "manifest remove",
     "add_target": "manifest add-target",
+    "set_target": "manifest set-target",
     "remove_target": "manifest remove-target",
     "dump_manifest": "<implicit: every mutator>",
     "validate": "validate",

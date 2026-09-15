@@ -21,7 +21,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, OptionList, Static, Tree
+from textual.widgets import Button, DataTable, Input, Label, OptionList, Static, Tree
 from textual.widgets.option_list import Option
 
 from framework.tui.components.forms import FieldRow
@@ -145,6 +145,105 @@ class PickerModal(FilterListNav, ModalScreen[str]):
         self.dismiss(event.option_id)
 
     def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class TargetsModal(ModalScreen[None]):
+    """The fanout targets of one fetcher, as rows you can add to, edit, or remove.
+
+    A fanout fetcher runs once per target, so the targets ARE the run plan — and
+    until this existed the page showed only how many there were. Editing in
+    particular had no path at all: fixing a typo'd subscription id meant removing
+    the target and retyping every field.
+
+    The modal renders and routes keys; the page owns the manifest and performs the
+    api calls, same as everywhere else. Each action pushes its own screen (a form,
+    a confirm) on top of this one, so rows are re-read on resume rather than being
+    passed back and forth.
+    """
+
+    BINDINGS = [
+        Binding("escape", "done", "Done"),
+        Binding("a", "add", "Add"),
+        Binding("e", "edit", "Edit"),
+        Binding("x", "remove", "Remove"),
+    ]
+
+    def __init__(
+        self,
+        title: str,
+        columns: List[str],
+        get_rows,
+        on_add,
+        on_edit,
+        on_remove,
+        subtitle: str = "",
+    ) -> None:
+        super().__init__()
+        self._title = title
+        self._columns = columns
+        self._get_rows = get_rows          # () -> List[List[str]], one row per target
+        self._on_add = on_add              # () -> None
+        self._on_edit = on_edit            # (index) -> None
+        self._on_remove = on_remove        # (index) -> None
+        self._subtitle = subtitle
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="modal-card", classes="wide"):
+            yield Label(self._title, id="modal-title")
+            if self._subtitle:
+                yield Label(self._subtitle, id="modal-subtitle")
+            yield DataTable(id="targets-table", cursor_type="row", zebra_stripes=True)
+            yield Static("", id="targets-count")
+            yield Static("a add    e edit    x remove    esc done", id="targets-keys")
+
+    def on_mount(self) -> None:
+        table = self.query_one("#targets-table", DataTable)
+        table.add_columns("#", *self._columns)
+        self._populate()
+        table.focus()
+
+    def on_screen_resume(self) -> None:
+        """Re-read after a form or confirm above this one closes.
+
+        The rows live in the manifest, which the page mutates — so the table is
+        rebuilt from the source rather than tracking edits of its own.
+        """
+        self._populate()
+
+    def _populate(self) -> None:
+        table = self.query_one("#targets-table", DataTable)
+        cursor = table.cursor_row
+        table.clear()
+        rows = self._get_rows()
+        for i, row in enumerate(rows):
+            table.add_row(str(i), *row, key=str(i))
+        if rows:
+            table.move_cursor(row=min(cursor, len(rows) - 1))
+        self.query_one("#targets-count", Static).update(
+            f"{len(rows)} target(s) · fields come from the fetcher's target_schema"
+            if rows
+            else "no targets yet — press 'a' to add one"
+        )
+
+    def _index(self) -> int:
+        table = self.query_one("#targets-table", DataTable)
+        return table.cursor_row if table.row_count else -1
+
+    def action_add(self) -> None:
+        self._on_add()
+
+    def action_edit(self) -> None:
+        i = self._index()
+        if i >= 0:
+            self._on_edit(i)
+
+    def action_remove(self) -> None:
+        i = self._index()
+        if i >= 0:
+            self._on_remove(i)
+
+    def action_done(self) -> None:
         self.dismiss(None)
 
 

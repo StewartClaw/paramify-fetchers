@@ -28,12 +28,29 @@ from framework.tui.modals import (
     MultiPickerModal,
     PickerModal,
     PreviewModal,
+    TargetsModal,
 )
+
+
+def _cell(value) -> str:
+    """One target field as table text. An unset field reads as a dash rather than
+    an empty cell, so a missing required value is visible at a glance."""
+    if value is None or value == "":
+        return "—"
+    return str(value)
+
+
+def _target_summary(target: dict) -> str:
+    """A target on one line, for confirmations. Secrets are named, never valued —
+    the manifest holds ${env:VAR} references, and printing them invites the habit
+    of putting the credential itself there."""
+    vals = {k: v for k, v in (target or {}).items() if k != "secrets"}
+    return "  ".join(f"{k}={v}" for k, v in vals.items()) or "(empty)"
 
 
 class ManifestPage(ButtonRowNav, Vertical):
     HINTS = [
-        ("a", "add"), ("e", "edit"), ("x", "remove"), ("t", "target"),
+        ("a", "add"), ("e", "edit"), ("x", "remove"), ("t", "targets"),
         ("A", "assessment"), ("s", "save"), ("v", "validate"), ("p", "preview"),
     ]
 
@@ -41,8 +58,7 @@ class ManifestPage(ButtonRowNav, Vertical):
         Binding("a", "add_fetcher", "Add"),
         Binding("e", "edit_entry", "Edit"),
         Binding("x", "remove_entry", "Remove"),
-        Binding("t", "add_target", "Add target"),
-        Binding("T", "remove_target", "Rm target", show=False),
+        Binding("t", "edit_targets", "Targets"),
         Binding("A", "pick_assessment", "Assessment"),
         Binding("s", "save", "Save"),
         Binding("v", "validate", "Validate"),
@@ -421,6 +437,101 @@ class ManifestPage(ButtonRowNav, Vertical):
             done,
         )
 
+    def action_edit_targets(self) -> None:
+        """Open the fanout targets of the selected fetcher as an editable table.
+
+        A fanout fetcher runs once per target, so the targets are the run plan.
+        The page only ever showed their count, and there was no way to change one
+        — a typo meant removing the target and retyping every field.
+        """
+        use, m = self._selected, self._manifest
+        if not use or m is None:
+            return
+        d = self._descriptors().get(use)
+        if not d or not d.get("supports_targets"):
+            self.notify("This fetcher does not support targets.", severity="warning")
+            return
+
+        fields = [t["name"] for t in d.get("target_schema", [])]
+        per_target_secrets = [s for s in d.get("secrets", []) if s.get("per_target")]
+
+        def rows() -> List[List[str]]:
+            out = []
+            for t in (self._entry(use).get("targets") or []):
+                row = [_cell(t.get(f)) for f in fields]
+                if per_target_secrets:
+                    wired = len(t.get("secrets") or {})
+                    row.append(f"{wired}/{len(per_target_secrets)}" if wired else "—")
+                out.append(row)
+            return out
+
+        columns = [*fields] + (["secrets"] if per_target_secrets else [])
+        self.app.push_screen(
+            TargetsModal(
+                f"Targets — {use}",
+                columns,
+                rows,
+                on_add=self.action_add_target,
+                on_edit=lambda i: self._edit_target(use, i),
+                on_remove=lambda i: self._remove_target_at(use, i),
+                subtitle="the fetcher runs once per target",
+            )
+        )
+
+    def _edit_target(self, use: str, index: int) -> None:
+        m = self._manifest
+        d = self._descriptors().get(use) or {}
+        targets = self._entry(use).get("targets") or []
+        if m is None or not 0 <= index < len(targets):
+            return
+        current = targets[index]
+        current_secrets = current.get("secrets") or {}
+        value_specs = [
+            self._config_spec(t, current.get(t["name"])) for t in d.get("target_schema", [])
+        ]
+        secret_specs = [
+            {
+                "key": s["name"], "label": s["name"], "kind": "secret",
+                "value": env_name_from_ref(current_secrets.get(s["name"])) or (s.get("env") or ""),
+                "placeholder": s.get("env") or "", "required": True, "help": "",
+            }
+            for s in d.get("secrets", []) if s.get("per_target")
+        ]
+
+        def done(result: Optional[dict]) -> None:
+            if result is None:
+                return
+            api.set_target(
+                m, use, index,
+                result.get("values") or {},
+                secret_env=(result.get("secrets") or None),
+            )
+            self.rebuild()
+            self.notify(f"Updated target {index} of {use}.")
+
+        self.app.push_screen(
+            FormModal(
+                f"Edit target {index} — {use}",
+                {"values": value_specs, "secrets": secret_specs},
+                subtitle="target fields + per-target secrets",
+            ),
+            done,
+        )
+
+    def _remove_target_at(self, use: str, index: int) -> None:
+        m = self._manifest
+        if m is None:
+            return
+        summary = _target_summary((self._entry(use).get("targets") or [])[index])
+
+        def done(ok: bool) -> None:
+            if ok:
+                api.remove_target(m, use, index)
+                self.rebuild()
+                self.notify(f"Removed target {index} from {use}.")
+
+        self.app.push_screen(ConfirmModal(f"Remove target {index} ({summary}) from '{use}'?"), done)
+
     def action_add_target(self) -> None:
         use, m = self._selected, self._manifest
         if not use or m is None:
@@ -462,31 +573,6 @@ class ManifestPage(ButtonRowNav, Vertical):
 
         self.app.push_screen(
             FormModal(f"Add target to {use}", groups, subtitle="target fields + per-target secrets"),
-            done,
-        )
-
-    def action_remove_target(self) -> None:
-        use, m = self._selected, self._manifest
-        if not use or m is None:
-            return
-        targets = self._entry(use).get("targets") or []
-        if not targets:
-            self.notify("No targets to remove.")
-            return
-        options = []
-        for i, t in enumerate(targets):
-            vals = {k: v for k, v in t.items() if k != "secrets"}
-            summary = "  ".join(f"{k}={v}" for k, v in vals.items()) or "(empty)"
-            options.append((str(i), f"[{i}] {summary}"))
-
-        def done(idx: Optional[str]) -> None:
-            if idx is not None:
-                api.remove_target(m, use, int(idx))
-                self.rebuild()
-                self.notify("Target removed.")
-
-        self.app.push_screen(
-            PickerModal(f"Remove target from {use}", options, subtitle="Pick a target to remove"),
             done,
         )
 
