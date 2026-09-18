@@ -21,6 +21,8 @@ Fetchers are small scripts that collect compliance evidence from your infrastruc
 <div align="center">
 
 <a href="fetchers/aws/"><img src="fetchers/logos/aws.svg" alt="AWS" width="56" height="56" style="margin: 20px;"></a>
+<a href="fetchers/azure/"><img src="fetchers/logos/azure.svg" alt="Azure" width="56" height="56" style="margin: 20px;"></a>
+<a href="fetchers/gcp/"><img src="fetchers/logos/gcp.svg" alt="GCP" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/datadog/"><img src="fetchers/logos/datadog.png" alt="Datadog" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/okta/"><img src="fetchers/logos/okta.svg" alt="Okta" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/sentinelone/"><img src="fetchers/logos/sentinelone.svg" alt="SentinelOne" width="56" height="56" style="margin: 20px;"></a>
@@ -35,11 +37,11 @@ Fetchers are small scripts that collect compliance evidence from your infrastruc
 
 | Category | Fetchers | What it collects |
 |---|---:|---|
-| **AWS** | 80 | Encryption at rest, IAM, high availability, logging, network segmentation — across the AWS service surface |
-| **Azure** | 27 | Storage/disk/SQL encryption and CMK use, Entra identity + Conditional Access, RBAC assignments and custom roles, network security groups, Key Vault config and key rotation, Defender plans, diagnostic settings and activity-log alerts, backup, and the managed databases |
-| **GCP** | 19 | Disk/bucket/Cloud SQL/BigQuery/Secret Manager encryption and CMEK use, IAM policy bindings, custom roles and service-account keys, KMS key rotation, GKE cluster hardening, Cloud Logging sinks and metric alerts, VPC/firewall/DNS segmentation, load-balancer TLS, and API keys |
-| **Datadog** | 13 | Cloud SIEM detection rules & signals, log pipelines/indexes/archives, host & container inventory, agent checks, APM services, and incidents with timelines |
-| **Okta** | 8 | Phishing-resistant MFA, authenticators, least privilege, just-in-time access, account management |
+| **AWS** | 80 | Encryption at rest and in transit, IAM and Organizations guardrails, threat detection and vulnerability scanning, logging and config drift, network segmentation, WAF and DDoS protection, backup and high availability, patch compliance, key and secret rotation, and CI/CD pipeline config |
+| **Azure** | 28 | Storage/disk/SQL encryption and CMK use, Entra identity + Conditional Access, RBAC assignments and custom roles, Azure Policy assignments, network security groups, Key Vault config and key rotation, Defender plans and per-resource assessments, VM hardening, the container and PaaS surface (AKS, Container Registry, App Service, Functions, Databricks), diagnostic settings and activity-log alerts, backup, and the managed databases |
+| **GCP** | 19 | Disk/bucket/Cloud SQL/BigQuery/Secret Manager encryption and CMEK use, IAM policy bindings, custom roles and service-account keys, KMS key rotation, GKE cluster and Compute Engine hardening, Cloud Logging sinks, Cloud SQL backups and network exposure, VPC/firewall/DNS segmentation, load-balancer TLS, and API keys |
+| **Datadog** | 13 | Cloud SIEM detection rules, signals and operational config, monitors, log pipelines/indexes/archives, host & container inventory, agent checks, APM services, and incidents with timelines |
+| **Okta** | 8 | Phishing-resistant MFA and passwordless authentication, authenticators, least privilege, just-in-time access, non-user account authentication, suspicious activity management, and account management |
 | **CrowdStrike** | 7 | Managed host inventory, Spotlight vulnerabilities, detections, prevention policies, Zero Trust Assessment, FileVantage file integrity, and host firewall policies and rules |
 | **SentinelOne** | 5 | Agents, activities, cloud detection rules, XDR assets, user config |
 | **KnowBe4** | 4 | Security-awareness, high-risk, developer, and module-based training summaries |
@@ -57,8 +59,9 @@ More integrations are in progress. To request a fetcher or upvote what should be
 <img src="fetchers/logos/qualys.svg" alt="SSL Labs" width="56" height="56" style="margin: 20px;">
 <img src="fetchers/logos/wiz.jpeg" alt="Wiz" width="56" height="56" style="margin: 20px;">
 <img src="fetchers/logos/servicenow.svg" alt="ServiceNow" width="56" height="56" style="margin: 20px;">
+<picture><source media="(prefers-color-scheme: dark)" srcset="fetchers/logos/github-dark.svg"><img src="fetchers/logos/github.svg" alt="GitHub" width="56" height="56" style="margin: 20px;"></picture>
 
-GitHub · and more
+and more
 
 </div>
 
