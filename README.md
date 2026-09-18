@@ -20,7 +20,7 @@ Fetchers are small scripts that collect compliance evidence from your infrastruc
 
 <div align="center">
 
-<a href="fetchers/aws/"><img src="fetchers/logos/aws.svg" alt="AWS" width="56" height="56" style="margin: 20px;"></a>
+<a href="fetchers/aws/"><picture><source media="(prefers-color-scheme: dark)" srcset="fetchers/logos/aws-dark.svg"><img src="fetchers/logos/aws.svg" alt="AWS" width="56" height="56" style="margin: 20px;"></picture></a>
 <a href="fetchers/azure/"><img src="fetchers/logos/azure.svg" alt="Azure" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/gcp/"><img src="fetchers/logos/gcp.svg" alt="GCP" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/datadog/"><img src="fetchers/logos/datadog.svg" alt="Datadog" width="56" height="56" style="margin: 20px;"></a>
