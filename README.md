@@ -32,6 +32,8 @@ Fetchers are small scripts that collect compliance evidence from your infrastruc
 <a href="fetchers/k8s/"><img src="fetchers/logos/kubernetes.svg" alt="Kubernetes" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/rippling/"><img src="fetchers/logos/rippling.svg" alt="Rippling" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/checkov/"><img src="fetchers/logos/checkov.png" alt="Checkov" width="56" height="56" style="margin: 20px;"></a>
+<a href="fetchers/paramify/"><img src="fetchers/logos/paramify.svg" alt="Paramify" width="56" height="56" style="margin: 20px;"></a>
+<a href="fetchers/servicenow/"><img src="fetchers/logos/servicenow.svg" alt="ServiceNow" width="56" height="56" style="margin: 20px;"></a>
 
 </div>
 
@@ -48,7 +50,9 @@ Fetchers are small scripts that collect compliance evidence from your infrastruc
 | **GitLab** | 4 | CI/CD pipeline config, merge-request and project summaries, significant change notifications |
 | **Kubernetes** | 3 | EKS pod inventory, microservice segmentation, `kubectl` security posture |
 | **Rippling** | 3 | Employee roster, current employees, managed devices |
+| **Paramify** | 3 | FedRAMP 20x vulnerability reporting — accepted vulnerability info, vulnerability detail, and historical VER activity |
 | **Checkov** | 2 | IaC scans over cloned Terraform / Kubernetes source |
+| **ServiceNow** | 2 | Customer service cases and ITSM change records |
 
 ### Coming soon
 
@@ -58,7 +62,6 @@ More integrations are in progress. To request a fetcher or upvote what should be
 
 <img src="fetchers/logos/qualys.svg" alt="SSL Labs" width="56" height="56" style="margin: 20px;">
 <img src="fetchers/logos/wiz.jpeg" alt="Wiz" width="56" height="56" style="margin: 20px;">
-<img src="fetchers/logos/servicenow.svg" alt="ServiceNow" width="56" height="56" style="margin: 20px;">
 <picture><source media="(prefers-color-scheme: dark)" srcset="fetchers/logos/github-dark.svg"><img src="fetchers/logos/github.svg" alt="GitHub" width="56" height="56" style="margin: 20px;"></picture>
 
 and more
