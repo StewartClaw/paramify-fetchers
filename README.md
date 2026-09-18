@@ -65,7 +65,7 @@ More integrations are in progress. To request a fetcher or upvote what should be
 <picture><source media="(prefers-color-scheme: dark)" srcset="fetchers/logos/github-dark.svg"><img src="fetchers/logos/github.svg" alt="GitHub" width="56" height="56" style="margin: 20px;"></picture>
 <img src="fetchers/logos/splunk.svg" alt="Splunk" width="56" height="56" style="margin: 20px;">
 <img src="fetchers/logos/jira.svg" alt="Jira" width="56" height="56" style="margin: 20px;">
-<img src="fetchers/logos/tenable.svg" alt="Tenable" width="56" height="56" style="margin: 20px;">
+<picture><source media="(prefers-color-scheme: dark)" srcset="fetchers/logos/tenable-dark.svg"><img src="fetchers/logos/tenable.svg" alt="Tenable" width="56" height="56" style="margin: 20px;"></picture>
 
 and more
 
