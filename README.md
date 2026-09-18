@@ -24,13 +24,13 @@ Fetchers are small scripts that collect compliance evidence from your infrastruc
 <a href="fetchers/azure/"><img src="fetchers/logos/azure.svg" alt="Azure" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/gcp/"><img src="fetchers/logos/gcp.svg" alt="GCP" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/datadog/"><img src="fetchers/logos/datadog.svg" alt="Datadog" width="56" height="56" style="margin: 20px;"></a>
-<a href="fetchers/okta/"><img src="fetchers/logos/okta.svg" alt="Okta" width="56" height="56" style="margin: 20px;"></a>
+<a href="fetchers/okta/"><picture><source media="(prefers-color-scheme: dark)" srcset="fetchers/logos/okta-dark.svg"><img src="fetchers/logos/okta.svg" alt="Okta" width="56" height="56" style="margin: 20px;"></picture></a>
 <a href="fetchers/sentinelone/"><img src="fetchers/logos/sentinelone.svg" alt="SentinelOne" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/crowdstrike/"><img src="fetchers/logos/crowdstrike.svg" alt="CrowdStrike" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/knowbe4/"><img src="fetchers/logos/knowbe4.svg" alt="KnowBe4" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/gitlab/"><img src="fetchers/logos/gitlab.svg" alt="GitLab" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/k8s/"><img src="fetchers/logos/kubernetes.svg" alt="Kubernetes" width="56" height="56" style="margin: 20px;"></a>
-<a href="fetchers/rippling/"><img src="fetchers/logos/rippling.svg" alt="Rippling" width="56" height="56" style="margin: 20px;"></a>
+<a href="fetchers/rippling/"><picture><source media="(prefers-color-scheme: dark)" srcset="fetchers/logos/rippling-dark.svg"><img src="fetchers/logos/rippling.svg" alt="Rippling" width="56" height="56" style="margin: 20px;"></picture></a>
 <a href="fetchers/checkov/"><img src="fetchers/logos/checkov.png" alt="Checkov" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/paramify/"><img src="fetchers/logos/paramify.svg" alt="Paramify" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/servicenow/"><img src="fetchers/logos/servicenow.png" alt="ServiceNow" width="56" height="56" style="margin: 20px;"></a>
