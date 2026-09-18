@@ -33,7 +33,7 @@ Fetchers are small scripts that collect compliance evidence from your infrastruc
 <a href="fetchers/rippling/"><img src="fetchers/logos/rippling.svg" alt="Rippling" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/checkov/"><img src="fetchers/logos/checkov.png" alt="Checkov" width="56" height="56" style="margin: 20px;"></a>
 <a href="fetchers/paramify/"><img src="fetchers/logos/paramify.svg" alt="Paramify" width="56" height="56" style="margin: 20px;"></a>
-<a href="fetchers/servicenow/"><img src="fetchers/logos/servicenow.svg" alt="ServiceNow" width="56" height="56" style="margin: 20px;"></a>
+<a href="fetchers/servicenow/"><img src="fetchers/logos/servicenow.png" alt="ServiceNow" width="56" height="56" style="margin: 20px;"></a>
 
 </div>
 
