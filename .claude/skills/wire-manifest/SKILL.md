@@ -105,6 +105,7 @@ Build the exact command sequence from the gaps. Map each gap to one command:
 | Missing per-fetcher config | `manifest set-config <fetcher> key=value` |
 | Missing platform config | `manifest set-platform-config <category> key=value` |
 | Fanout needs targets | `manifest add-target <fetcher> field=val ... --secret name=ENV_VAR` |
+| A target's field is wrong | `manifest set-target <fetcher> <index> field=val ...` (replaces that target; its secrets are kept) |
 | Ambient-cred var stripped | `manifest set-passthrough <category> VAR [VAR ...]` |
 | Programs needed as targets | `programs target [fetcher ...]` |
 | Issue report has no `assessment_id` | `assessments select <fetcher>` |

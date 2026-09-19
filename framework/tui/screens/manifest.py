@@ -28,21 +28,37 @@ from framework.tui.modals import (
     MultiPickerModal,
     PickerModal,
     PreviewModal,
+    TargetsModal,
 )
+
+
+def _cell(value) -> str:
+    """One target field as table text. An unset field reads as a dash rather than
+    an empty cell, so a missing required value is visible at a glance."""
+    if value is None or value == "":
+        return "—"
+    return str(value)
+
+
+def _target_summary(target: dict) -> str:
+    """A target on one line, for confirmations. Secrets are named, never valued —
+    the manifest holds ${env:VAR} references, and printing them invites the habit
+    of putting the credential itself there."""
+    vals = {k: v for k, v in (target or {}).items() if k != "secrets"}
+    return "  ".join(f"{k}={v}" for k, v in vals.items()) or "(empty)"
 
 
 class ManifestPage(ButtonRowNav, Vertical):
     HINTS = [
-        ("a", "add"), ("e", "edit"), ("x", "remove"), ("t", "target"),
+        ("a", "add"), ("e", "entry"), ("x", "remove"), ("t", "targets"),
         ("A", "assessment"), ("s", "save"), ("v", "validate"), ("p", "preview"),
     ]
 
     BINDINGS = [
         Binding("a", "add_fetcher", "Add"),
-        Binding("e", "edit_entry", "Edit"),
+        Binding("e", "edit_entry", "Entry"),
         Binding("x", "remove_entry", "Remove"),
-        Binding("t", "add_target", "Add target"),
-        Binding("T", "remove_target", "Rm target", show=False),
+        Binding("t", "edit_targets", "Targets"),
         Binding("A", "pick_assessment", "Assessment"),
         Binding("s", "save", "Save"),
         Binding("v", "validate", "Validate"),
@@ -306,6 +322,7 @@ class ManifestPage(ButtonRowNav, Vertical):
         if self._manifest is None or value == (self._run().get("output_dir") or ""):
             return  # blur fires on every focus change; only a real change commits
         api.set_output_dir(self._manifest, value)
+        self._autosave()
         self.notify("Output dir updated.")
         self.rebuild()
 
@@ -356,6 +373,7 @@ class ManifestPage(ButtonRowNav, Vertical):
                             api.set_secret(m, name, s["name"], s["env"])
                             wired = True
             self._selected = names[-1]
+            self._autosave()
             self.rebuild()
             n = len(names)
             noun = "fetcher" if n == 1 else "fetchers"
@@ -397,7 +415,7 @@ class ManifestPage(ButtonRowNav, Vertical):
             for s in d.get("secrets", []) if not s.get("per_target")
         ]
         if not config_specs and not secret_specs:
-            hint = " — press 't' to add targets" if d.get("supports_targets") else ""
+            hint = " — press 't' to edit its targets" if d.get("supports_targets") else ""
             self.notify(f"{use} has no entry-level config or secrets to edit{hint}.")
             return
         groups = {"config": config_specs, "secrets": secret_specs}
@@ -409,17 +427,123 @@ class ManifestPage(ButtonRowNav, Vertical):
                 api.set_fetcher_config(m, use, k, v)
             for name, env in (result.get("secrets") or {}).items():
                 api.set_secret(m, use, name, env)
+            self._autosave()
             self.rebuild()
             self.notify(f"Updated {use}.")
 
+        # Entry level only. 104 of the 138 fanout fetchers declare no entry
+        # config, so for those this form is nothing but secrets — indistinguishable
+        # from the target editor failing to open unless it says where targets live.
+        # Short enough to survive the card width — a subtitle that clips takes the
+        # targets pointer with it, which is the half that answers "why is this
+        # form only secrets?". The ENV-VAR rule is also on the secrets group label.
+        subtitle = "Secrets take the ENV VAR NAME, not the value."
+        if d.get("supports_targets"):
+            # Leads, and the secrets note is trimmed to fit beside it: the card
+            # clips rather than wraps, and this is the half that answers "why is
+            # this form only secrets?". The ENV-VAR rule is also on the group label.
+            subtitle = "Targets: press 't'.   ·   Secrets take the ENV VAR NAME."
+        self.app.push_screen(
+            FormModal(f"Edit {use} — entry config and secrets", groups, subtitle=subtitle),
+            done,
+        )
+
+    def action_edit_targets(self) -> None:
+        """Open the fanout targets of the selected fetcher as an editable table.
+
+        A fanout fetcher runs once per target, so the targets are the run plan.
+        The page only ever showed their count, and there was no way to change one
+        — a typo meant removing the target and retyping every field.
+        """
+        use, m = self._selected, self._manifest
+        if not use or m is None:
+            return
+        d = self._descriptors().get(use)
+        if not d or not d.get("supports_targets"):
+            self.notify("This fetcher does not support targets.", severity="warning")
+            return
+
+        fields = [t["name"] for t in d.get("target_schema", [])]
+        per_target_secrets = [s for s in d.get("secrets", []) if s.get("per_target")]
+
+        def rows() -> List[List[str]]:
+            out = []
+            for t in (self._entry(use).get("targets") or []):
+                row = [_cell(t.get(f)) for f in fields]
+                if per_target_secrets:
+                    wired = len(t.get("secrets") or {})
+                    row.append(f"{wired}/{len(per_target_secrets)}" if wired else "—")
+                out.append(row)
+            return out
+
+        columns = [*fields] + (["secrets"] if per_target_secrets else [])
+        self.app.push_screen(
+            TargetsModal(
+                f"Targets — {use}",
+                columns,
+                rows,
+                on_add=self.action_add_target,
+                on_edit=lambda i: self._edit_target(use, i),
+                on_remove=lambda i: self._remove_target_at(use, i),
+                subtitle="the fetcher runs once per target",
+            )
+        )
+
+    def _edit_target(self, use: str, index: int) -> None:
+        m = self._manifest
+        d = self._descriptors().get(use) or {}
+        targets = self._entry(use).get("targets") or []
+        if m is None or not 0 <= index < len(targets):
+            return
+        current = targets[index]
+        current_secrets = current.get("secrets") or {}
+        value_specs = [
+            self._config_spec(t, current.get(t["name"])) for t in d.get("target_schema", [])
+        ]
+        secret_specs = [
+            {
+                "key": s["name"], "label": s["name"], "kind": "secret",
+                "value": env_name_from_ref(current_secrets.get(s["name"])) or (s.get("env") or ""),
+                "placeholder": s.get("env") or "", "required": True, "help": "",
+            }
+            for s in d.get("secrets", []) if s.get("per_target")
+        ]
+
+        def done(result: Optional[dict]) -> None:
+            if result is None:
+                return
+            api.set_target(
+                m, use, index,
+                result.get("values") or {},
+                secret_env=(result.get("secrets") or None),
+            )
+            self._autosave()
+            self.rebuild()
+            self.notify(f"Updated target {index} of {use}.")
+
         self.app.push_screen(
             FormModal(
-                f"Edit {use}",
-                groups,
-                subtitle="Secret fields take the env var NAME (e.g. KNOWBE4_API_KEY), not the credential.",
+                f"Edit target {index} — {use}",
+                {"values": value_specs, "secrets": secret_specs},
+                subtitle="target fields + per-target secrets",
             ),
             done,
         )
+
+    def _remove_target_at(self, use: str, index: int) -> None:
+        m = self._manifest
+        if m is None:
+            return
+        summary = _target_summary((self._entry(use).get("targets") or [])[index])
+
+        def done(ok: bool) -> None:
+            if ok:
+                api.remove_target(m, use, index)
+                self._autosave()
+                self.rebuild()
+                self.notify(f"Removed target {index} from {use}.")
+
+        self.app.push_screen(ConfirmModal(f"Remove target {index} ({summary}) from '{use}'?"), done)
 
     def action_add_target(self) -> None:
         use, m = self._selected, self._manifest
@@ -444,6 +568,7 @@ class ManifestPage(ButtonRowNav, Vertical):
                 return
             values = result.get("values") or {}
             api.add_target(m, use, values, secret_env=(result.get("secrets") or None))
+            self._autosave()
             self.rebuild()
             # api.validate() does not check required target fields, so warn here:
             # an empty/invalid required field would otherwise be dropped silently.
@@ -462,31 +587,6 @@ class ManifestPage(ButtonRowNav, Vertical):
 
         self.app.push_screen(
             FormModal(f"Add target to {use}", groups, subtitle="target fields + per-target secrets"),
-            done,
-        )
-
-    def action_remove_target(self) -> None:
-        use, m = self._selected, self._manifest
-        if not use or m is None:
-            return
-        targets = self._entry(use).get("targets") or []
-        if not targets:
-            self.notify("No targets to remove.")
-            return
-        options = []
-        for i, t in enumerate(targets):
-            vals = {k: v for k, v in t.items() if k != "secrets"}
-            summary = "  ".join(f"{k}={v}" for k, v in vals.items()) or "(empty)"
-            options.append((str(i), f"[{i}] {summary}"))
-
-        def done(idx: Optional[str]) -> None:
-            if idx is not None:
-                api.remove_target(m, use, int(idx))
-                self.rebuild()
-                self.notify("Target removed.")
-
-        self.app.push_screen(
-            PickerModal(f"Remove target from {use}", options, subtitle="Pick a target to remove"),
             done,
         )
 
@@ -533,6 +633,7 @@ class ManifestPage(ButtonRowNav, Vertical):
             if chosen_id is None:
                 return
             api.set_assessment(m, use, by_id[chosen_id])
+            self._autosave()
             self.rebuild()
             self.notify(
                 f"{use} → {api.assessment_display_name(by_id[chosen_id])}"
@@ -556,10 +657,36 @@ class ManifestPage(ButtonRowNav, Vertical):
             if ok:
                 api.remove_entry(m, use)
                 self._selected = None
+                self._autosave()
                 self.rebuild()
                 self.notify(f"Removed {use}.")
 
         self.app.push_screen(ConfirmModal(f"Remove '{use}' from the manifest?"), done)
+
+    def _autosave(self) -> None:
+        """Write the manifest through after a mutation.
+
+        Edits used to live in memory until 's', so quitting — or a crash, or
+        simply not knowing the key — discarded them with nothing on screen to say
+        the file and the view had diverged. Saving on every mutation removes the
+        divergence instead of trying to surface it.
+
+        A save that cannot happen keeps the change in memory and says so: a
+        manifest the schema refuses or a path that will not take a write is worth
+        reporting, but not worth throwing away the edit that triggered it. 's'
+        retries once the cause is fixed.
+        """
+        m = self._manifest
+        if m is None:
+            return
+        try:
+            api.dump_manifest(m, self.app.manifest_path, self.app.root_path)
+        except Exception as exc:  # noqa: BLE001 — every failure keeps the edit
+            self.notify(
+                f"Change not saved: {exc} — fix, then press 's'.",
+                severity="error",
+                timeout=12,
+            )
 
     def action_save(self) -> None:
         m = self._manifest

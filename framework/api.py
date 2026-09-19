@@ -817,6 +817,31 @@ def add_target(
     return m
 
 
+def set_target(
+    m: dict, use: str, index: int, values: Dict[str, Any],
+    secret_env: Optional[Dict[str, str]] = None,
+) -> dict:
+    """Replace the fanout target at `index`. Raises IndexError if it is not there.
+
+    A replace rather than a merge: the editor hands back every field it showed,
+    and a field the user cleared has to actually clear. Per-target secrets are
+    preserved when `secret_env` is None, because the editor can show a target's
+    values without touching credentials it never displayed.
+    """
+    entry = _find_entry(m, use)
+    targets = (entry or {}).get("targets") or []
+    if not 0 <= index < len(targets):
+        raise IndexError(f"{use} has no target at index {index}")
+    target = dict(values)
+    if secret_env is not None:
+        if secret_env:
+            target["secrets"] = {n: f"${{env:{v}}}" for n, v in secret_env.items()}
+    elif targets[index].get("secrets"):
+        target["secrets"] = targets[index]["secrets"]
+    targets[index] = target
+    return m
+
+
 def remove_target(m: dict, use: str, index: int) -> dict:
     """Remove the fanout target at `index` from a fetcher entry. No-op if the
     entry or index does not exist."""

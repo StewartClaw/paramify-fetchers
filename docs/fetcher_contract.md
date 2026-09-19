@@ -234,7 +234,7 @@ paramify programs list              # programs in the Paramify workspace: readab
 paramify programs target [fetcher ...]  # select programs by name and write them as fanout targets
 paramify assessments list           # assessments in the workspace: readable name + UUID
 paramify assessments select [fetcher ...]  # point issue-report fetchers at an assessment
-paramify manifest <sub>             # build/edit a manifest file (init/new/add/remove/set-config/set-secret/add-target/remove-target/...)
+paramify manifest <sub>             # build/edit a manifest file (init/new/add/remove/set-config/set-secret/add-target/set-target/remove-target/...)
 ```
 
 `paramify programs` and `paramify assessments` are the commands that read live

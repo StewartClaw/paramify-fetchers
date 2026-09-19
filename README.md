@@ -331,6 +331,7 @@ paramify manifest remove <fetcher>
 paramify manifest set-config <fetcher> key=value
 paramify manifest set-secret <fetcher> <secret_name> <ENV_VAR>
 paramify manifest add-target <fetcher> k=v ... [--secret name=ENV_VAR ...]
+paramify manifest set-target <fetcher> <index> k=v ... [--secret name=ENV_VAR ...]
 paramify manifest remove-target <fetcher> <index>
 paramify manifest set-platform-config <category> key=value
 paramify manifest set-passthrough <category> ENV_VAR ...

@@ -12,6 +12,17 @@ schemas and the `paramify` CLI — not the internal code.
 
 ### Added
 
+- **A fanout target editor in the TUI** (`t` on the Manifest tab). A fanout
+  fetcher runs once per target, so its targets are the run plan — but the page
+  showed only how many there were, and there was no way to change one: fixing a
+  typo'd account id meant removing the target and retyping every field. `t` now
+  opens the fetcher's targets as a table, with `a` add, `e` edit, and `x` remove
+  on the highlighted row. Fields come from the fetcher's `target_schema`, so the
+  form is whatever that fetcher actually takes, per-target secrets included.
+- **`paramify manifest set-target <fetcher> <index> k=v …`** — the CLI half of
+  the editor. A replace rather than a merge, so a field cleared in the form is
+  actually cleared; the target's per-target secrets are preserved unless
+  `--secret` is passed.
 - **Upload artifacts through the evidence set's channel.** Where a set has one,
   the uploader now sends `channelId` with the artifact: an artifact uploaded
   outside a configured channel does not count toward validation on the solution
@@ -24,7 +35,6 @@ schemas and the `paramify` CLI — not the internal code.
   to it when no `--config` is given, which is how the TUI — which passes no path —
   reaches base_url and the per-fetcher overrides at all. Both front-ends now name
   the config in use before a batch runs.
-
 - **A central `validators/` registry.** A validator is now a first-class,
   deduplicated object — one file at `validators/<category>/<key>.yaml`, checked
   against the new `framework/schemas/validator_schema.json`. It carries the
@@ -44,6 +54,16 @@ schemas and the `paramify` CLI — not the internal code.
   to the shared registry.
 
 ### Changed
+
+- **The TUI saves manifest edits as they are made.** Adding a fetcher, editing an
+  entry, adding / editing / removing a target, picking an assessment, removing an
+  entry, and changing the output dir all write the file immediately. Edits used
+  to live in memory until `s`, with nothing on screen to say the file and the
+  view had diverged — so quitting, or not knowing the key, discarded the work.
+  `s` still saves on demand, which is also how a write that failed is retried: a
+  save that cannot happen reports why and keeps the edit rather than losing it
+  along with the file write.
+
 
 - **`paramify validators check`** — runs the behaviour cases in
   `validators/_cases/` through the real ECMAScript engine
