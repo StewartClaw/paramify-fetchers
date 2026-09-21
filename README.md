@@ -198,6 +198,8 @@ paramify upload   [run-dir]    # push a run's evidence to Paramify (default: lat
 paramify issues   upload       # push a run's issue reports to assessment intake
 paramify programs <sub>        # list workspace programs; turn them into targets
 paramify assessments <sub>     # list workspace assessments; point issue reports at one
+paramify capabilities <sub>    # read solution capabilities and the narratives they claim
+paramify artifacts <sub>       # list/download the artifacts already attached to evidence sets
 paramify manifest <sub>        # build/edit a manifest (see below)
 ```
 

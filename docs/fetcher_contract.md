@@ -234,6 +234,10 @@ paramify programs list              # programs in the Paramify workspace: readab
 paramify programs target [fetcher ...]  # select programs by name and write them as fanout targets
 paramify assessments list           # assessments in the workspace: readable name + UUID
 paramify assessments select [fetcher ...]  # point issue-report fetchers at an assessment
+paramify capabilities list          # solution capabilities in the workspace
+paramify capabilities show <cap>    # one capability and the narratives it claims
+paramify artifacts list [set]       # evidence sets, or one set's artifacts (newest first)
+paramify artifacts pull <set>       # download an attached artifact to ./evidence/pulled
 paramify manifest <sub>             # build/edit a manifest file (init/new/add/remove/set-config/set-secret/add-target/set-target/remove-target/...)
 ```
 
@@ -244,6 +248,22 @@ UUID while operators know them by name. Both compose the ordinary manifest
 mutators under the hood (`add_target`, `set_fetcher_config`), so each produces
 exactly the manifest a hand-written `manifest add-target` / `manifest set-config`
 would.
+
+`paramify capabilities` and `paramify artifacts` read live workspace state too
+(`GET /solution-capabilities`, `GET /evidence`, `GET /evidence/{id}/artifacts`),
+but they write nothing — they exist for authoring validators rather than
+manifests. A capability carries the narrative an assessor reads, which is the
+claim a validator has to substantiate; `artifacts` is the read direction of
+`paramify upload`, including artifacts this repo never produced.
+
+Two things they cannot tell you. The capability -> evidence set link is
+write-only in the API (`POST /evidence/{id}/associate`), so pairing one with the
+other stays a human decision. And an artifact is only this repo's envelope shape
+when it was uploaded from here — `artifacts pull` reports whether what it
+downloaded is enveloped, because a workspace also holds PDFs and screenshots
+that no regex validator can be authored against. A pulled artifact is real
+workspace evidence: it lands in the gitignored `./evidence/pulled` and belongs in
+neither a commit nor a validator case file.
 
 Every `manifest` subcommand also accepts `--json`, emitting a stable `{ok, path, errors}` object so an agent can build a manifest step by step and read `errors` to see what's still missing.
 

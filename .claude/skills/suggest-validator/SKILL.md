@@ -1,472 +1,295 @@
 ---
 name: suggest-validator
 description: >
-  Author regex validators for a fetcher's evidence and record them in the
-  central validators/ registry. Use after a fetcher has been run against a real
-  tenant and produced a populated evidence file — reads that file, finds the
-  fields that prove the control is being implemented, builds the validator set
-  that asserts them, proves it against real evidence in Node, and writes it to
-  validators/<category>/<key>.yaml. Triggers on "suggest a validator", "author a
-  validator", "regex validator", "validate this evidence", "what regex proves
-  this control".
+  Author regex validators for a Paramify evidence set and record them in the
+  central validators/ registry. Works from real evidence — a local fetcher run,
+  or an artifact pulled from the workspace — and from the solution capability's
+  narrative, so the validators assert the claim an assessor actually reads
+  rather than whatever the payload happens to contain. Proposes candidate
+  assertions for the user to choose from, proves each one can fail, and writes
+  it to validators/<category>/<key>.yaml. Use this whenever the user mentions
+  validators, validating evidence, or proving a control — "suggest a
+  validator", "author a validator", "regex validator", "validate this
+  evidence", "what regex proves this control", "does this evidence prove the
+  control", "add a validator for this fetcher" — and also when they ask what
+  *could* be validated about an evidence file, which is this skill's Phase 3.
 ---
 
 # Author a Validator
 
-This skill is the third beat in the fetcher lifecycle, after `create-fetcher`
-(build) and `wire-manifest` (run): once a fetcher has produced **real** evidence,
-it authors the validators that assert the evidence actually proves what it is
-supposed to, and records them in the registry.
+The third beat in the fetcher lifecycle, after `create-fetcher` (build) and
+`wire-manifest` (run). Once real evidence exists, this authors the validators
+that assert it proves what it is supposed to, and records them in the registry.
 
-**Golden rules**
+**The shape of the work:** establish three things — the evidence file, the
+narrative it is supposed to substantiate, and the control that narrative serves
+— then propose what could be asserted, let the user choose, and build only
+those. Phases 1–3 are an interview and should feel like one. Phases 4–6 are
+mechanical and each has a reference file.
+
+**Read these when you reach them, not before:**
+
+| File | When |
+|---|---|
+| `references/authoring.md` | Phase 4 — roles, rule forms, the regex engine |
+| `references/proving.md` | Phase 5 — case files and the three directions |
+| `references/registry.md` | Phase 6 — file layout, naming, sync |
+
+Two bundled scripts save re-deriving the same thing every run:
+`scripts/find_evidence.py` (Phase 1) and `scripts/score_evidence.py` (Phase 5).
+
+## Golden rules
 
 - **One control needs a validator *set*, not a validator.** An evidence set
-  passes only when every validator on it passes, so the work is to decide which
-  two or three assertions cover the control — see Phase 3. Both halves of a
-  measured A/B on live AWS evidence converged on 2–5 validators per evidence set
-  without being told to.
-- **It needs real, populated evidence.** A fake-cred smoke-test run (what
-  `create-fetcher` produces) yields an empty payload. You cannot author a
-  meaningful "proves the control" regex from that. If the newest evidence looks
-  empty, say so and stop (Phase 1).
-- **Uncountable must never read as zero.** This is the failure mode that costs
-  the most and is the hardest to see: a validator that concludes compliance from
-  a *count* reads a renamed upstream key as zero violations, and therefore as
-  compliant. Every count-based assertion needs something proving the field was
-  there to count. Phase 3 says how.
-- **Anchor on the key name plus a value pattern**, never on byte position or
-  whitespace. `"completion_rate":\s*(?<completion_rate>100|[1-9][0-9])`, not a
-  brittle slice of pretty-printed JSON. Key ordering and indentation vary
-  between runs.
+  passes only when every validator on it passes, so the work is deciding which
+  two or three assertions cover the claim.
+- **It needs real, populated evidence.** A fake-cred smoke test (what
+  `create-fetcher` produces) yields an empty payload, and you cannot author a
+  meaningful "proves the control" regex from that.
+- **Uncountable must never read as zero.** The costliest failure and the
+  hardest to see: a validator that concludes compliance from a *count* reads a
+  renamed upstream key as zero violations, and therefore as compliant. Every
+  count-based assertion needs something proving the field was there to count.
 - **Every validator ships with three things: what it asserts, what it does NOT
-  assert, and when it (correctly) fails.** A regex without its failure mode is a
-  false sense of coverage. The first two go in `statement`; the third you prove
-  in Phase 4.
-- **The regex runs over the evidence JSON file as written to disk** — the whole
-  envelope (`schema_version` + `metadata` + `payload`), since that is the file
-  Paramify's validator sees. So avoid anchor keys that collide with envelope
-  metadata (`fetcher_name`, `fetcher_version`, `category`, `run_id`, `target`,
-  `collected_at`, `status`, `exit_code`, `error`, `evidence_set`,
-  `schema_version`) unless you pin a payload-specific value too. The one
-  sanctioned exception is the collection-health validator (Phase 3), where the
-  envelope *is* the subject of the check.
+  assert, and when it correctly fails.** A regex without its failure mode is a
+  false sense of coverage. The first two go in `statement`; the third is
+  Phase 5.
 
 ---
 
-## Phase 0 — Locate the fetcher and its newest real evidence
+## Phase 1 — Which evidence, and where is it
 
-1. **Which fetcher?** The one the user just tested, or a name they give.
-   `paramify list` shows discovered fetchers if unsure. Read its
-   `fetchers/<category>/<short_name>/fetcher.yaml` — you need its
-   `evidence_set.reference_id` (for `evidence_sets`) and its `description`
-   (for Phase 2).
+**Ask what the validators are for before hunting for files.** A fetcher name, a
+control, an evidence set reference — any of those narrows the search. Hunting
+first means sifting hundreds of files with no way to tell which one matters.
 
-2. **Find the newest successful evidence file.** Evidence lands under
-   `evidence/run-<timestamp>/<fetcher_name>*.json` (fanout fetchers write one
-   file per target: `<fetcher_name>_<target>.json`). Run dir names sort
-   chronologically, so newest = last:
-   ```bash
-   .venv/bin/python - <<'PY'
-   import json, glob
-   FETCHER = "<fetcher_name>"            # e.g. aws_s3_encryption_status
-   for path in sorted(glob.glob(f"evidence/run-*/{FETCHER}*.json"), reverse=True):
-       meta = json.load(open(path)).get("metadata", {})
-       print(f'{meta.get("status","?"):8s} {path}')
-   PY
-   ```
-   Pick the newest with `status: success`. For a fanout fetcher, pick one
-   representative file (the largest is usually the most populated) and note the
-   sibling target files share its shape.
+Then resolve it, in this order:
 
-3. **No evidence at all?** If nothing matches, the fetcher hasn't been run yet.
-   Stop and route the user to run it first (`wire-manifest` → `paramify run`),
-   against a **real tenant** — this skill has nothing to read without that.
-
----
-
-## Phase 1 — Confirm the evidence is real (not empty / not a smoke test)
-
-Before reading for content, sanity-check the payload isn't hollow.
+**1a. Local runs first.** This is the evidence the user just produced, it is
+already gitignored, and it costs nothing to read.
 
 ```bash
-.venv/bin/python - <<'PY'
-import json
-d = json.load(open("<path>"))
-p = d.get("payload", d)
-def signal(o):
-    if isinstance(o, dict):  return any(signal(v) for v in o.values())
-    if isinstance(o, list):  return len(o) > 0 and any(signal(x) for x in o)
-    if isinstance(o, (int, float)): return o != 0
-    if isinstance(o, str):   return bool(o.strip())
-    return False
-print("HAS DATA" if signal(p) else "LOOKS EMPTY — check against the caveat below")
-PY
+python .claude/skills/suggest-validator/scripts/find_evidence.py <fetcher_name>
 ```
 
-Treat this as triage, not proof. It is wrong in **both** directions:
+Newest first, with the run status and whether the payload carries any measured
+value. Pick the newest `success` that looks populated. For a fanout fetcher
+(one file per target) take the largest as representative and note the siblings
+share its shape.
 
-- **False "HAS DATA": static descriptive fields mask empty measurements.** A
+**1b. The workspace, when nothing local fits.** Some evidence this repo never
+produced — a customer upload, another team's fetcher — and it is only readable
+from Paramify:
+
+```bash
+paramify artifacts list                     # every evidence set + artifact count
+paramify artifacts list EVD-FOO             # that set's artifacts, newest first
+paramify artifacts pull EVD-FOO             # -> ./evidence/pulled/, gitignored
+```
+
+`pull` reports whether what landed is **enveloped**. If it is not, stop and say
+so: a workspace holds PDFs, screenshots and spreadsheets, and a regex validator
+authored against one is authored against a shape this repo does not produce.
+What you pulled is real workspace evidence — it stays out of commits and out of
+case files.
+
+**1c. A path from the user, when neither works.** Ask for a path, not a paste:
+evidence payloads run to thousands of lines and pasting real tenant data into
+the conversation is the thing Phase 5 forbids for case files.
+
+**Nothing anywhere?** The fetcher has not been run. Route the user to
+`wire-manifest` → `paramify run` against a **real tenant** and stop — this
+skill has nothing to read without that.
+
+### Before reading further: is it actually populated?
+
+The script's verdict is triage and it is wrong in **both** directions.
+
+- **False "populated": static descriptive fields mask empty measurements.** A
   payload carrying a control name, a `ksi` string, or a `related_controls` list
-  reads as populated even when every *measured* value is zero. So the
-  authoritative check is field-specific and happens in Phase 4: if your chosen
-  metric matches **0 times** on a `success` run, the evidence is empty *for that
-  metric* — come back here and ask for a populated run.
+  reads as full even when every *measured* value is zero. The authoritative
+  check is field-specific and happens in Phase 5: if your chosen metric matches
+  **0 times** on a `success` run, the evidence is empty *for that metric*.
+- **False "HOLLOW": some fetchers are inverted, where empty IS compliant.**
+  Findings-style fetchers — access analyzer, guard duty, vulnerability scanning
+  — report problems. Zero findings means the control is working. **Do not stop
+  on these.** The population you must prove non-empty is the *scanner*, not the
+  findings: that an analyzer exists and is `ACTIVE`, that the findings array is
+  present.
 
-- **False "LOOKS EMPTY": some fetchers are inverted, where empty IS the
-  compliant state.** Findings-style fetchers — `aws_access_analyzer_findings`,
-  `aws_guard_duty_findings`, `aws_inspector_vulnerability_scanning` — report
-  problems. Zero findings means the control is working, not that collection
-  failed. **Do not stop on these.** Instead, note that the population you must
-  prove non-empty is the *scanner*, not the findings: that an analyzer exists
-  and is `ACTIVE`, that the findings array is present. See Phase 3, which is
-  built around exactly this distinction.
-
-A genuinely-zero tenant is possible and valid. If the user confirms the zeros
-are real, you can still author a presence assertion, but say plainly it cannot
-assert a non-zero posture.
+A genuinely-zero tenant is valid. If the user confirms the zeros are real, you
+can still author a presence assertion — but say plainly it cannot assert a
+non-zero posture.
 
 ---
 
-## Phase 2 — Identify what proves the control
+## Phase 2 — What is this supposed to prove
 
-The critical field is the one whose presence and value demonstrate the control
-is **being implemented** — not just that the fetcher ran.
+Evidence on its own does not tell you what matters in it. A payload has fifty
+fields; two of them bear on the control. The narrative is what separates them.
 
-1. **What is this evidence supposed to prove?** Read `fetcher.yaml`'s
-   `description` and `evidence_set.name`/`.instructions`. Many fetchers name
-   their KSI directly (`KSI-IAM-APM`, `KSI-CMT-VTD`); some payloads carry
-   `ksi`/`related_controls` inline. That intent tells you which number matters.
-
-2. **Establish the polarity before anything else.** Does more data mean better
-   posture, or worse?
-   - **Normal polarity** — a coverage rate, an encrypted count, an enabled flag.
-     Higher/present is compliant.
-   - **Inverted polarity** — findings, violations, exposures, unresolved alerts.
-     *Zero is compliant*, and a non-empty list is the failure.
-
-   Getting this backwards produces a validator that is exactly wrong, and it
-   reads as plausible either way. State the polarity out loud before you write
-   a pattern.
-
-3. **Pick the anchor, preferring the strongest signal available:**
-   - **(a) A rollup metric that quantifies posture** — a rate, percentage, or
-     count. Strongest, because a non-zero value means the control is working,
-     not merely configured. *Examples:*
-     `payload.results.summary.encryption_percentage` (aws s3),
-     `payload.summary.phishing_resistant_mfa_percentage` (okta).
-   - **(b) A status/enum whose value denotes compliance** — `"status":"ACTIVE"`,
-     `"enabled":true`, `"StorageEncrypted":true`. Good when there's no rollup.
-   - **(c) A count of violations that must be zero** — the only option for
-     inverted polarity, and the only way to assert something about *every* item
-     in a list (see the note below). Carries the counting trap; Phase 3 handles it.
-
-4. **Know the engine's hard limit before you design.** `MATCH_GROUP` reads the
-   **first** match only. You therefore *cannot* use capture groups to assert
-   something about every element of a list — group 1 binds to whichever item
-   happens to appear first. Per-resource assertions must be inverted into
-   "the count of bad items is zero", which is form (c).
-
-5. **Avoid trivially-true and colliding anchors.** Skip keys present in every
-   run regardless of posture, and skip envelope-metadata keys unless you pin a
-   payload-specific value. Note `"status"` appears in envelope metadata
-   (`"success"`), on analyzers (`"ACTIVE"`), and inside findings — anchoring on
-   key+value, or pinning a neighbouring ARN, disambiguates.
-
----
-
-## Phase 3 — Build the validator set
-
-A control is covered by up to three kinds of validator. The `role:` field
-records which is which.
-
-| `role` | Asserts | How many |
-|---|---|---|
-| `completeness` | the collection succeeded and the population is real | exactly one per evidence set |
-| `configuration` | the posture is right | as many as the control needs |
-| `integrity` | the field a count-based rule reads was actually present | one per count-based configuration validator |
-
-### 3a. The collection-health validator (`role: completeness`)
-
-Every evidence set gets exactly one. It asserts the run succeeded and the
-envelope is intact, so a failed collection never reads as a compliance verdict.
-
-```yaml
-regex: '"exit_code":\s*(?<exit_code>-?\d+)'
-validation_rules:
-  - regexOperation: { type: MATCH_COUNT }        # the envelope is there at all
-    criteria: NOT_EQUALS
-    value: { type: CUSTOM_TEXT, customText: "0" }
-  - regexOperation: { type: MATCH_GROUP, groupNumber: 1 }
-    criteria: EQUALS
-    value: { type: CUSTOM_TEXT, customText: "0" }
-```
-
-**Why the guards are written positively.** Paramify's rule model has a
-`disposition` of `PASS`/`FAIL`/`ERROR`, and `ERROR` is the right label here —
-"the evidence never arrived, so compliance is unknown" is genuinely different
-from "the control looks bad". **But the REST API accepts `disposition` and
-discards it** (verified against a live tenant). Every rule therefore becomes a
-pass-requirement, and the negative ERROR form (`MATCH_COUNT EQUALS 0` +
-`exit_code NOT_EQUALS 0`) self-contradicts: it demands the envelope both be
-absent and carry a non-zero exit code. A validator written that way is a
-constant function — measured returning FAIL on every input, including clean
-evidence.
-
-The positive form above asserts the same thing and works today. When the API
-starts honouring `disposition`, this validator migrates by inverting both rules
-and adding `disposition: ERROR` — a mechanical change to one small file per
-evidence set, which is why collection-health is factored out rather than folded
-into each compliance validator.
-
-Note this validator carries the `exit_code` anchor for the whole set, so the
-compliance validators below do **not** need it. That keeps their regexes to the
-one thing they assert, and it means their capture groups start at 1.
-
-### 3b. Compliance validators (`role: configuration`)
-
-Build one per distinct assertion. Two forms, and which one you use decides
-whether you also need 3c.
-
-**Form A — read a value (normal polarity).** Self-guarding: the
-`MATCH_COUNT NOT_EQUALS 0` rule proves the field was present, so no separate
-integrity validator is needed.
-
-```yaml
-regex: '"encryption_percentage":\s*(?<encryption_percentage>\d+)'
-validation_rules:
-  - regexOperation: { type: MATCH_COUNT }        # the field exists
-    criteria: NOT_EQUALS
-    value: { type: CUSTOM_TEXT, customText: "0" }
-  - regexOperation: { type: MATCH_GROUP, groupNumber: 1 }
-    criteria: EQUALS
-    value: { type: CUSTOM_TEXT, customText: "100" }
-```
-
-**Form B — count violations (inverted polarity, or any per-resource check).**
-The regex matches only *bad* things and the rule requires zero of them.
-
-```yaml
-regex: '"CIDRs":\s*"0\.0\.0\.0/0"'
-validation_rules:
-  - regexOperation: { type: MATCH_COUNT }
-    criteria: EQUALS
-    value: { type: CUSTOM_TEXT, customText: "0" }
-```
-
-**Form B cannot guard itself.** Zero matches is its pass condition, so it has no
-way to distinguish "no violations" from "the key I search for no longer exists".
-One regex cannot both count violations and prove structure. That is what 3c is
-for, and it is mandatory whenever you write a Form B validator.
-
-### 3c. The integrity validator (`role: integrity`)
-
-One per Form B validator. It asserts the *structural* key was present, so a zero
-count reflects posture rather than an unreadable payload.
-
-```yaml
-regex: '"CIDRs":\s*"'                            # the key itself, any value
-validation_rules:
-  - regexOperation: { type: MATCH_COUNT }
-    criteria: NOT_EQUALS
-    value: { type: CUSTOM_TEXT, customText: "0" }
-```
-
-**Why this is not optional.** Measured on real AWS evidence: an S3 payload with
-three genuinely unencrypted buckets flips from FAIL to PASS when only the
-per-item key `encrypted` is renamed upstream — the violation regex stops
-matching, the count goes 4 → 1, and the validator reports compliance. The
-`exit_code` anchor does not catch it, because the envelope is intact. Envelope
-drift and payload drift are different failures and need different guards.
-
-Pick the structural anchor one level up from the violation: if you count
-`"CIDRs":\s*"0\.0\.0\.0/0"`, prove `"CIDRs":\s*"`. If you count
-`"isPublic":\s*true`, prove `"findings":\s*\[`.
-
-### Writing the regex itself
-
-- **The engine is ECMAScript (JavaScript)**, not Python `re` or PCRE. It applies
-  `g` and `s` automatically but **never `m`**, so `^`/`$` match the whole
-  document and lines are spanned with `[\s\S]*?`.
-- **Named groups are `(?<name>…)`.** The Python form `(?P<name>…)` is a hard
-  compile error. Name every group, in `snake_case` derived from the key it
-  captures (`BackupRetentionPeriod` → `backup_retention_period`), unique within
-  the pattern. Naming does not renumber anything — `(?<x>…)` is still group 1 —
-  so `validation_rules` keeps referencing groups by number.
-- Be whitespace-tolerant (`\s*`) so pretty- and compact-printed evidence both
-  match.
-- Non-zero count/percent (1–100): `(?:100|[1-9][0-9]?)`. Any positive int:
-  `[1-9][0-9]*`. High-only (≥90): `(?:100|9[0-9])`.
-- **Encode a numeric threshold in the regex, not only in the criteria.** The
-  comparison operators are not documented as numeric or lexicographic, and
-  `"8" >= "14"` is true as a string. Use a comparison criterion only where both
-  readings agree (`EQUALS`, `NOT_EQUALS`, group-to-group equality).
-- **Keep multi-field matches inside one object.** There is no per-object
-  scoping, so a pattern spanning two keys can bridge across neighbouring items.
-  Fence it with `[^}]*?` when the objects have no nested braces, and test that
-  a good item next to a bad one does not splice into a false match.
-- **Do not pin `schema_version`.** It reads like prudent version-safety but
-  fails in the dangerous direction: a bump that leaves your anchor untouched
-  stops the pattern matching entirely. The presence rules above cover structural
-  change and fail loudly.
-
----
-
-## Phase 4 — Prove it, in three directions (STOP on any failure)
-
-Write the cases down, then run them. `validators/_cases/<key>.yaml` pins what
-each validator must return for a given artifact, and
-`paramify validators check` evaluates them with the real ECMAScript engine —
-the same semantics Paramify applies, including the ones that bite:
-`MATCH_GROUP` reads only the first match, rules combine with AND, and a rule
-that read nothing still *holds*.
-
-```yaml
-validator: <your key>
-cases:
-  - name: full_coverage
-    expect: PASS
-    artifact: '{"metadata":{"exit_code":0},"payload":{"results":{"summary":{"encryption_percentage":100}}}}'
-  - name: partial_coverage
-    expect: FAIL
-    artifact: '{"metadata":{"exit_code":0},"payload":{"results":{"summary":{"encryption_percentage":66}}}}'
-  - name: rollup_renamed
-    expect: FAIL
-    artifact: '{"metadata":{"exit_code":0},"payload":{"results":{"summary":{"encryption_pct":66}}}}'
-```
+**2a. The solution capability, from the workspace.** A capability carries the
+narrative an assessor reads — the claim the evidence substantiates:
 
 ```bash
-paramify validators check --select <your key>
+paramify capabilities list --family "Audit"     # narrow by family or subfamily
+paramify capabilities show "Audit Logging Criteria"
 ```
 
-Artifacts are inline and synthetic — just the keys your regex touches, plus the
-envelope. **Never paste real tenant evidence**: it carries account ids and
-resource names, which is why `evidence/` is gitignored.
+`show` prints the written narratives. That sentence is the input to Phase 3.
 
-Write all three directions. They are not optional:
+**The capability → evidence set link is not readable** — it is write-only in
+the API — so nothing can tell you which capability a set belongs to. Show the
+user the candidates and let them pick. If the capability has no narrative
+written yet, say so: there is no claim to validate against, and asserting
+something plausible instead is how a validator ends up proving the wrong thing.
 
-1. **Compliant** — good posture. **PASS:** the validator passes.
-   **FAIL:** most often the regex never matched, meaning the evidence is empty
-   for this metric. Return to Phase 1.
+**2b. A Paramify export, when the API is not reachable.** Ask the user to
+attach or point at their export and read the capability from there.
 
-2. **Non-compliant** — coverage below threshold, a flag flipped, a violation
-   introduced. **PASS:** the validator fails. **FAIL:** it still passes, and a
-   validator that cannot fail proves nothing. This is the most common defect.
+**2c. The control itself.** `GET /projects/{id}/control-implementations`
+returns control *ids* only (`3.1.1 a.`), not text, so the text comes from:
 
-3. **Unreadable** — the envelope intact but the compliance key **renamed**.
-   **PASS:** the validator does not pass. **FAIL:** it passes, which is the
-   silent false pass — worse than a false failure, because nobody investigates a
-   green check.
+1. `framework/reference/ksis.yaml` for FedRAMP 20x KSIs — in the repo,
+   authoritative, no network.
+2. The fetcher's own `ksis:` and `evidence_set.instructions` in
+   `fetchers/<category>/<name>/fetcher.yaml`.
+3. Web search, last — for an unfamiliar framework. **Show the user what you
+   found and have them confirm it** before it informs a single regex. A
+   hallucinated or wrong-revision control text produces a validator that is
+   confidently wrong, and nothing downstream catches it.
 
-Direction 3 is the one that gets skipped and the one that catches the whole
-class of bug this phase exists for.
+**2d. Establish the polarity out loud.** Does more data mean better posture, or
+worse? A coverage rate or an enabled flag is *normal* polarity: higher and
+present is compliant. Findings, violations and exposures are *inverted*: zero
+is compliant and a non-empty list is the failure. Getting this backwards
+produces a validator that is exactly wrong and reads as plausible either way.
 
-**A violation-counting validator cannot pass direction 3 on its own** — zero
-matches is its pass condition, so a renamed key reads as zero violations. Its
-case file should say so plainly and expect PASS; the assertion that matters goes
-in a **set-level** case file instead, which combines every validator on the
-evidence set the way Paramify does:
+---
 
-```yaml
-evidence_set: EVD-SQS-ENC
-cases:
-  - name: per_queue_flag_renamed_upstream
-    expect: FAIL          # the integrity validator is what fails here
-    artifact: '...'
-```
+## Phase 3 — Propose, then let the user choose
 
-Build that case so the *only* thing failing is the integrity validator — keep
-the rollup reading compliant. Otherwise the case passes for the wrong reason and
-proves nothing about the partner. Sanity-check it by deleting the integrity
-validator and confirming the case goes red.
+You now have the evidence, the narrative, and the control. Lay out what *could*
+be asserted and let the user pick — this is the step that decides what gets
+built, and it is theirs to make.
 
-If you need the raw trace for one artifact — every rule's left and right side
-and whether it held — call the evaluator directly:
+Present each candidate as: **what it asserts**, **the field it reads**, and
+**why it bears on the narrative**. One or two lines each. Something like:
+
+> 1. **Every bucket is encrypted** — `payload.results.summary.encryption_percentage`
+>    is 100. Directly substantiates "data at rest is encrypted"; fails the
+>    moment one bucket is created without it.
+> 2. **No bucket is publicly readable** — zero matches for `"isPublic": true`.
+>    The narrative claims access is restricted, and a public bucket contradicts
+>    it regardless of encryption.
+> 3. **The collection succeeded** — `exit_code` is 0. Not a compliance claim;
+>    it stops a failed collection from reading as a clean verdict.
+
+Rank them by how directly they bear on the narrative, and say which ones you
+would pick and why. Note what each one does *not* cover — that gap is what the
+next candidate in the list is for.
+
+**Prefer the strongest anchor available:**
+
+- **(a) A rollup metric** — a rate, percentage or count. Strongest, because a
+  non-zero value means the control is *working*, not merely configured.
+- **(b) A status or enum whose value denotes compliance** — `"status":"ACTIVE"`,
+  `"enabled":true`. Good when there is no rollup.
+- **(c) A count of violations that must be zero** — the only option for
+  inverted polarity, and the only way to assert something about *every* item in
+  a list. Carries the counting trap; Phase 4 handles it.
+
+Skip anchors that are trivially true — keys present in every run regardless of
+posture — and flag any candidate you are proposing only because it is easy to
+match. Two well-chosen assertions beat five that cannot fail.
+
+Then build only what the user picks.
+
+---
+
+## Phase 4 — Build the set
+
+**Read `references/authoring.md` now.** It has the three roles
+(`completeness` / `configuration` / `integrity`), the two rule forms and when
+each needs an integrity partner, and the regex engine's real behaviour —
+ECMAScript not Python, `MATCH_GROUP` reads the first match only, and why the
+collection-health guards are written positively.
+
+---
+
+## Phase 5 — Prove it, in three directions
+
+**Read `references/proving.md` now.** Write the case files, then run
+`paramify validators check --select <key>`. Stop on any failure.
+
+The three directions are compliant (it passes), non-compliant (it fails), and
+**key renamed** (it does not pass). The third is the one that gets skipped and
+the one the whole phase exists for.
+
+**Then run it against the real evidence, and report the result.**
 
 ```bash
-node framework/validator_eval/score.mjs <validator.json> <artifact.json> --mode api-today --pretty
+python .claude/skills/suggest-validator/scripts/score_evidence.py <evidence.json>
 ```
 
+With no `--select` it runs every validator whose `evidence_sets` matches the
+set the file names — the same set Paramify would apply — and prints each rule's
+two sides and whether it held. A FAIL here is a legitimate outcome — the tenant may genuinely not meet the
+narrative, and saying so is the point of the exercise. But that reading is only
+available when the synthetic compliant case passes:
 
-## Phase 5 — Record it in the registry
+- synthetic compliant PASSes, real evidence FAILs → the tenant is
+  non-compliant. Report it as a finding.
+- synthetic compliant FAILs → the validator is broken. It cannot pass on a
+  hand-built good artifact, so it is not measuring what it claims.
 
-Validators live in the repo, one file per validator:
-`validators/<category>/<key>.yaml`. The file is the shared template; the
-customer's tuned copy and its Paramify id live customer-side and are never
-written back here.
+Without that discriminator, "the evidence doesn't meet the narrative" becomes
+the excuse that ships a bad regex.
 
-1. **Copy the template, once per validator:**
-   ```bash
-   cp validators/_template/validator.yaml validators/<category>/<key>.yaml
-   ```
-   `<category>` matches the fetcher's category (`aws`, `okta`, `gitlab`, …).
-   `<key>` **must equal the filename stem** and match
-   `^[a-z0-9]+(?:_[a-z0-9]+)*$` — discovery raises on a mismatch. Name it for
-   what it asserts, not for the fetcher: `s3_buckets_all_encrypted`, not
-   `s3_validator_2`.
+---
 
-2. **Fill it in**, deleting the template's guidance comments as you go. Required:
-   `key`, `name`, `type`, `statement`, `evidence_sets`. Set `role` per Phase 3.
-   `evidence_sets` takes the fetcher's `evidence_set.reference_id` — and every
-   other set this same assertion applies to.
+## Phase 6 — Record it, and hand back
 
-3. **Reuse before you create.** A validator is a *deduplicated* object: if one
-   already asserts this, add the new `reference_id` to its `evidence_sets` list
-   instead of writing a second file. Check first:
-   ```bash
-   grep -rl "EVD-<REF>" validators/ ; grep -rn "^name:" validators/<category>/
-   ```
-   Two files asserting the same thing will drift apart.
+**Read `references/registry.md` now** for the file layout, the naming rules,
+reuse-before-you-create, and the registry gate
+(`pytest tests/test_validators_registry.py -q`).
 
-4. **Names must be unique across the whole workspace** — Paramify rejects a
-   duplicate `name` with HTTP 400. A compliance validator and its integrity
-   partner need genuinely distinct names, not `Foo` and `Foo 2`.
+When you hand back, report for each validator: its key, its role, what it
+asserts, and when it correctly fails. Say plainly that these are derived from
+one evidence sample — templates to confirm against more runs.
 
-5. **Commit the cases with it.** The case file you wrote in Phase 4 belongs in
-   `validators/_cases/<key>.yaml` (or `set_<REFERENCE-ID>.yaml` for a set-level
-   one). A validator without cases has nothing proving it can fail, and
-   `paramify validators check` will name it.
-
-6. **Verify it lands** (STOP on any failure):
-   ```bash
-   .venv/bin/python -m pytest tests/test_validators_registry.py -q
-   ```
-   **PASS:** the registry gate is green — every file is schema-valid, `key`
-   matches its filename, and discovery finds no duplicates.
-   **FAIL:** fix before moving on. A schema-invalid file breaks discovery for
-   the whole registry, not just itself.
-
-7. **Hand back, and state the boundary.** Report each validator's key, role, and
-   what it asserts, and say plainly that these are derived from one evidence
-   sample: they are templates to confirm against more runs. Syncing to Paramify
-   is a separate, explicit step (`paramify validators sync`, create-or-skip) and
-   is the user's call, not this skill's.
+**Syncing is a separate, explicit step and the user's call.**
+`paramify validators sync` writes to a live workspace, often production. Offer
+it; do not run it as the closing move of an interview.
 
 ---
 
 ## Anti-patterns
 
+- **Hunting for evidence before asking what it is for.** Phase 1 sifts hundreds
+  of files with no criterion otherwise.
+- **Authoring against the fetcher description instead of the narrative.** The
+  description says what was collected; the narrative says what it must prove.
+  They are not the same, and only one of them is what an assessor reads.
+- **Asking the user to paste an evidence file.** Ask for a path.
+- **Taking a web-searched control text as authoritative** without showing the
+  user. Wrong-revision control text produces a confidently wrong validator.
+- **Authoring against a non-enveloped artifact** pulled from the workspace — a
+  PDF or a screenshot is not a shape a regex validator can read.
 - **Concluding compliance from a count without proving the counted field
-  exists.** The defect this skill's Phase 3c exists to prevent, and the one that
-  is invisible in review because the validator looks and tests fine.
-- Authoring from an empty/smoke-test payload — it'll match nothing real or,
-  worse, match the always-present zeros.
+  exists.** Invisible in review, because the validator looks and tests fine.
 - **Stopping on "looks empty" for a findings-style fetcher**, where zero
-  findings is the compliant state. Check the polarity first (Phase 2).
-- Getting the polarity backwards — asserting a findings list is non-empty, or
-  that a coverage rate is merely present.
-- Using `MATCH_GROUP` to assert something about every item in a list. It reads
-  the first match only; invert to a violation count.
-- Writing the collection-health guards in the negative `disposition: ERROR`
-  form. The API discards `disposition` today, so those rules contradict each
-  other and the validator can never pass.
-- Handing over a validator without its failure mode, or without running
-  direction 2 and 3 of Phase 4. A validator that cannot fail proves nothing.
-- Anchoring on an envelope-metadata key (`status`, `category`, `fetcher_name`, …)
-  without pinning a payload value. The collection-health validator is the
-  deliberate exception.
-- Emitting Python-flavored syntax — `(?P<name>…)` is a hard compile error in
-  ECMAScript. Use `(?<name>…)`.
-- Copying a validator to a second file because it applies to a second evidence
-  set. Add the `reference_id` to the existing file's `evidence_sets`.
-- Demonstrating a match with `grep -P` (unavailable on macOS) or Python `re`
-  (wrong flavor) — use Node so the shown match reflects Paramify's engine.
+  findings is the compliant state. Check the polarity first.
+- **Getting the polarity backwards** — asserting a findings list is non-empty,
+  or that a coverage rate is merely present.
+- **Using `MATCH_GROUP` to assert something about every item in a list.** It
+  reads the first match only; invert to a violation count.
+- **Emitting Python-flavored syntax** — `(?P<name>…)` is a hard compile error
+  in ECMAScript. Use `(?<name>…)`.
+- **Building the whole set before showing the user the options.** Phase 3 is
+  the user's decision, not a formality to narrate after the fact.
+- **Handing over a validator without its failure mode,** or without running
+  directions 2 and 3. A validator that cannot fail proves nothing.
+- **Copying a validator to a second file** because it applies to a second
+  evidence set. Add the `reference_id` to the existing file's `evidence_sets`.
+- **Syncing on your own initiative.** It writes to a live workspace.

@@ -56,10 +56,12 @@ def _subcommands(group: str) -> set:
 EXPECTED_TOP = {
     "list", "catalog", "describe", "ksi", "doctor", "manifests", "runs",
     "evidence", "validate", "run", "upload", "manifest", "scripts", "programs",
-    "assessments", "issues", "tui",
+    "assessments", "capabilities", "artifacts", "issues", "tui",
 }
 EXPECTED_PROGRAMS = {"list", "target"}
 EXPECTED_ASSESSMENTS = {"list", "select"}
+EXPECTED_CAPABILITIES = {"list", "show"}
+EXPECTED_ARTIFACTS = {"list", "pull"}
 EXPECTED_ISSUES = {"upload"}
 EXPECTED_MANIFEST = {
     "init", "new", "add", "remove", "set-config", "set-secret",
@@ -131,6 +133,18 @@ def test_workspace_lookups_read_token_from_dotenv(tmp_path, monkeypatch):
     api.list_assessments()
     assert seen["auth"] == "Bearer from-dotenv"
     assert seen["url"].startswith("https://example.test/api/v0/")
+
+
+def test_capabilities_and_artifacts_subcommands_registered():
+    """Same decorator guard as the groups above."""
+    capabilities = _subcommands("capabilities")
+    artifacts = _subcommands("artifacts")
+    assert EXPECTED_CAPABILITIES <= capabilities, (
+        f"missing capabilities subcommands: {EXPECTED_CAPABILITIES - capabilities}"
+    )
+    assert EXPECTED_ARTIFACTS <= artifacts, (
+        f"missing artifacts subcommands: {EXPECTED_ARTIFACTS - artifacts}"
+    )
 
 
 def test_issues_upload_accepts_force():
@@ -1513,3 +1527,251 @@ def test_manifest_init_still_creates(in_repo, tmp_path):
     result = runner.invoke(app, ["manifest", "init", "-f", str(target), "--json"])
     assert result.exit_code == 0, result.output
     assert target.is_file()
+
+
+# --------------------------------------------------------------------------- #
+# Capabilities and artifacts — the workspace reads a validator author needs
+#
+# The payload fixtures below are trimmed from real GET responses, so the
+# normalizers are tested against the shapes the API actually serves rather than
+# the ones the spec implies. Two of those shapes are load-bearing: `referenceId`
+# comes back null on a workspace that has not renumbered its template
+# capabilities, and an artifact's `pathname` is a presigned S3 link.
+# --------------------------------------------------------------------------- #
+
+_CAPABILITY_PAYLOAD = {
+    "solutionCapabilities": [
+        {
+            "id": "4a00a453-5d12-4314-ba4c-d9e477d605c1",
+            "templateReferenceId": "RS-12-01-01",
+            "referenceId": None,
+            "name": "Audit Logging Criteria",
+            "implementationStatus": "IMPLEMENTED",
+            "family": "System Monitoring",
+            "subfamily": "Audit Logging",
+            "risk": "Observability",
+            "riskFamily": "TechOps",
+            "mainComponent": {"id": "5909", "referenceId": "RS-04-04-02", "name": "Log Management"},
+            "functions": [
+                {"type": "PROVIDER", "name": "Leveraged Component", "narrative": None,
+                 "implementationStatus": "IMPLEMENTED"},
+                {"type": "END_USER", "name": "Core Process",
+                 "narrative": "The role configures Log Management to include audit records.",
+                 "implementationStatus": "IMPLEMENTED"},
+            ],
+        }
+    ]
+}
+
+_EVIDENCE_PAYLOAD = {
+    "evidences": [
+        {"id": "ev-1", "referenceId": "EVD-1", "name": "SSP", "description": "",
+         "instructions": "", "artifactCount": 1, "automated": False, "frequency": "ANNUAL"},
+        {"id": "ev-2", "referenceId": "EVD-2", "name": "Empty set", "artifactCount": 0},
+    ]
+}
+
+_ARTIFACT_PAYLOAD = {
+    "artifacts": [
+        {"id": "aaaaaaaa-0000-0000-0000-000000000001", "title": "Older",
+         "originalFileName": "old.json", "pathname": "https://s3.example/old?X-Amz-Signature=x",
+         "isUrl": False, "fileType": "application/json", "createdAt": "2026-01-01T00:00:00.000Z",
+         "createdBy": {"username": "A", "email": "a@example.test"}, "validators": []},
+        {"id": "bbbbbbbb-0000-0000-0000-000000000002", "title": "Newer",
+         "originalFileName": "new.json", "pathname": "https://s3.example/new?X-Amz-Signature=y",
+         "isUrl": False, "fileType": "application/json", "createdAt": "2026-06-01T00:00:00.000Z",
+         "createdBy": {"username": "B", "email": "b@example.test"},
+         "validators": [{"name": "All encrypted", "result": "PASS"}]},
+    ]
+}
+
+
+class _Resp:
+    def __init__(self, body):
+        self._body = body
+        self.status_code = 200
+        self.text = "{}"
+
+    def json(self):
+        return self._body
+
+
+@pytest.fixture
+def workspace_reads(monkeypatch):
+    """Stub the read path with the real payload shapes, recording every GET."""
+    monkeypatch.setenv("PARAMIFY_API_TOKEN", "test-token")
+    monkeypatch.setenv("PARAMIFY_API_BASE_URL", "https://example.test/api/v0")
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: True)
+    seen = []
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        seen.append(url)
+        if url.endswith("/solution-capabilities"):
+            return _Resp(_CAPABILITY_PAYLOAD)
+        if url.endswith("/evidence"):
+            return _Resp(_EVIDENCE_PAYLOAD)
+        if url.endswith("/artifacts"):
+            return _Resp(_ARTIFACT_PAYLOAD)
+        raise AssertionError(f"unexpected GET {url}")
+
+    monkeypatch.setattr("requests.get", fake_get)
+    return seen
+
+
+def test_capability_label_falls_back_to_the_template_reference_id():
+    """referenceId is null on a workspace that never renumbered its template
+    capabilities, and RS-12-01-01 is then the only identifier a user sees. A
+    label that skipped to the UUID would make the pick list unreadable."""
+    c = {"name": "", "reference_id": "", "template_reference_id": "RS-12-01-01", "id": "uuid"}
+    assert api.capability_display_name(c) == "RS-12-01-01"
+    assert api.capability_display_name({**c, "template_reference_id": ""}) == "uuid"
+
+
+def test_list_capabilities_normalizes_and_keeps_only_written_narratives(workspace_reads):
+    caps = api.list_capabilities()
+    assert len(caps) == 1
+    cap = caps[0]
+    assert cap["template_reference_id"] == "RS-12-01-01"
+    assert cap["reference_id"] == ""          # null collapses to "", never "None"
+    assert cap["main_component"] == "Log Management"
+    assert len(cap["functions"]) == 2         # both functions are kept …
+    written = api.capability_narratives(cap)
+    assert len(written) == 1                  # … but only one says anything
+    assert written[0]["type"] == "END_USER"
+
+
+def test_capabilities_show_prints_the_narrative(workspace_reads):
+    """The narrative is the whole reason the command exists — a `show` that
+    printed only metadata would leave the author back at guessing the intent."""
+    result = runner.invoke(app, ["capabilities", "show", "RS-12-01-01"])
+    assert result.exit_code == 0, result.output
+    assert "Audit Logging Criteria" in result.output
+    assert "audit records" in result.output
+
+
+def test_capabilities_show_resolves_by_name_and_reports_a_miss(workspace_reads):
+    assert runner.invoke(app, ["capabilities", "show", "Audit Logging"]).exit_code == 0
+    miss = runner.invoke(app, ["capabilities", "show", "nope"])
+    assert miss.exit_code != 0
+    assert "no capability matches" in (miss.output + str(miss.stderr_bytes or b""))
+
+
+def test_artifacts_list_without_a_set_lists_every_set(workspace_reads):
+    result = runner.invoke(app, ["artifacts", "list", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert [e["reference_id"] for e in payload["evidence_sets"]] == ["EVD-1", "EVD-2"]
+    assert payload["evidence_sets"][1]["artifact_count"] == 0
+
+
+def test_artifacts_list_sorts_newest_first(workspace_reads):
+    """`pull` with no --artifact takes the first entry, so the ordering here is
+    what decides which artifact gets authored against."""
+    result = runner.invoke(app, ["artifacts", "list", "EVD-1", "--json"])
+    assert result.exit_code == 0, result.output
+    artifacts = json.loads(result.output)["artifacts"]
+    assert [a["title"] for a in artifacts] == ["Newer", "Older"]
+    assert artifacts[0]["validators"] == [{"name": "All encrypted", "result": "PASS"}]
+
+
+def test_pull_artifact_does_not_send_the_api_token_to_s3(workspace_reads, tmp_path, monkeypatch):
+    """`pathname` is already presigned. S3 rejects a request carrying both
+    signatures ("Only one auth mechanism allowed"), so reusing the authenticated
+    read path here would fail on every artifact in the workspace."""
+    sent = {}
+
+    class _Download:
+        status_code = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def iter_content(self, chunk_size=None):
+            yield b'{"schema_version":"1.0","metadata":{"exit_code":0},"payload":{"x":1}}'
+
+    def fake_download(url, stream=None, timeout=None, headers=None):
+        sent["headers"] = headers
+        sent["url"] = url
+        return _Download()
+
+    monkeypatch.setattr("requests.get", fake_download)
+    result = api.pull_artifact(
+        {"id": "ev-1", "reference_id": "EVD-1", "name": "SSP"},
+        {"id": "bbbbbbbb-0000-0000-0000-000000000002", "file_name": "new.json",
+         "file_type": "application/json", "is_url": False,
+         "download_url": "https://s3.example/new?X-Amz-Signature=y"},
+        tmp_path,
+    )
+    assert sent["headers"] is None, "presigned download must not carry an Authorization header"
+    assert result["enveloped"] is True
+    assert Path(result["path"]).name == "EVD-1_bbbbbbbb.json"
+
+
+def test_pull_artifact_flags_a_non_enveloped_file(workspace_reads, tmp_path, monkeypatch):
+    """A workspace is full of PDFs and screenshots. Authoring a regex validator
+    against one is the mistake this flag exists to stop."""
+    class _Download:
+        status_code = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def iter_content(self, chunk_size=None):
+            yield b"%PDF-1.7 not json at all"
+
+    monkeypatch.setattr("requests.get", lambda *a, **k: _Download())
+    result = api.pull_artifact(
+        {"id": "ev-1", "reference_id": "EVD-1"},
+        {"id": "cccccccc-0000-0000-0000-000000000003", "file_name": "ssp.pdf",
+         "file_type": "application/pdf", "is_url": False,
+         "download_url": "https://s3.example/ssp"},
+        tmp_path,
+    )
+    assert result["enveloped"] is False
+    assert Path(result["path"]).name == "EVD-1_cccccccc.pdf"
+
+
+def test_pull_artifact_names_the_missing_envelope_keys(workspace_reads, tmp_path, monkeypatch):
+    """A bare "not enveloped" is confusing on an artifact that plainly has
+    schema_version and metadata — an older or hand-built one carries both and
+    still is not readable as an envelope. Live example from a stage workspace:
+    `data` where `payload` should be. Naming the gap makes the verdict
+    actionable instead of flat."""
+    class _Download:
+        status_code = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def iter_content(self, chunk_size=None):
+            yield b'{"schema_version":"0.1.0","metadata":{"exit_code":1},"data":{}}'
+
+    monkeypatch.setattr("requests.get", lambda *a, **k: _Download())
+    result = api.pull_artifact(
+        {"id": "ev-1", "reference_id": "EVD-1"},
+        {"id": "e" * 8, "file_name": "old.json", "file_type": "application/json",
+         "is_url": False, "download_url": "https://s3.example/old"},
+        tmp_path,
+    )
+    assert result["enveloped"] is False
+    assert result["missing_envelope_keys"] == ["payload"]
+
+
+def test_pull_artifact_refuses_a_link_artifact():
+    """isUrl artifacts are a pasted link, not a file; downloading the pathname
+    would write the target page to disk and call it evidence."""
+    with pytest.raises(ValueError, match="link, not a file"):
+        api.pull_artifact(
+            {"id": "ev-1", "reference_id": "EVD-1"},
+            {"id": "d" * 8, "is_url": True, "download_url": "https://example.test/page"},
+            "/tmp",
+        )
