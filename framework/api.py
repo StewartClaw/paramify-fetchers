@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import yaml
@@ -39,7 +39,7 @@ from packaging.utils import canonicalize_name
 from framework import yaml_io
 from framework.config_loader import discover_fetchers, discover_platforms
 from framework.contract import ConfigField, Secret, TargetField, effective_secrets
-from framework.envelope import is_enveloped, wrap_outputs
+from framework.envelope import ENVELOPE_KEYS, is_enveloped, wrap_outputs
 from framework.issue_reports import (
     ASSESSMENT_ID_FIELD,
     ASSESSMENT_NAME_FIELD,
@@ -2161,6 +2161,331 @@ def set_assessment(m: dict, use: str, assessment: dict) -> dict:
     if label and label != assessment["id"]:
         set_fetcher_config(m, use, ASSESSMENT_NAME_FIELD, label)
     return m
+
+
+# --------------------------------------------------------------------------- #
+# Paramify workspace — solution capabilities
+#
+# A capability carries the narrative an assessor actually reads: the claim the
+# evidence is supposed to substantiate. Authoring a validator against a fetcher
+# description instead is guessing at that claim, so the narrative has to be
+# readable from the same place the evidence is.
+#
+# The capability -> evidence set link is NOT readable here: it is write-only via
+# POST /evidence/{id}/associate. These helpers list and resolve capabilities;
+# pairing one with an evidence set stays a human decision, made per run.
+# --------------------------------------------------------------------------- #
+
+_CAPABILITIES_PATH = "/solution-capabilities"
+_EVIDENCE_SETS_PATH = "/evidence"
+_ARTIFACT_DOWNLOAD_TIMEOUT = 120
+# A pulled artifact is real tenant evidence. 200 MB is well past any enveloped
+# fetcher payload and stops a mis-selected disk image from filling the disk.
+_ARTIFACT_MAX_BYTES = 200 * 1024 * 1024
+
+
+def _resolve_workspace_item(
+    items: List[dict], selector: str, display: Callable[[dict], str],
+    noun: str, id_fields: Tuple[str, ...],
+) -> dict:
+    """Resolve one workspace object from an id, reference id, or name.
+
+    Exact match on any `id_fields` value, then exact case-insensitive display
+    name, then a unique case-insensitive substring of it. Raises LookupError
+    when nothing matches and ValueError when a substring is ambiguous — the
+    same contract as resolve_program / resolve_assessment, which predate this
+    and keep their own copies.
+    """
+    needle = selector.strip()
+    for item in items:
+        if any((item.get(f) or "") == needle for f in id_fields):
+            return item
+    lowered = needle.lower()
+    exact = [i for i in items if display(i).lower() == lowered]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        raise ValueError(
+            f"{selector!r} matches {len(exact)} {noun}s by name; use the id instead"
+        )
+    partial = [i for i in items if lowered in display(i).lower()]
+    if len(partial) == 1:
+        return partial[0]
+    if len(partial) > 1:
+        names = ", ".join(f"{display(i)} ({i['id']})" for i in partial[:5])
+        raise ValueError(f"{selector!r} is ambiguous — matches: {names}")
+    raise LookupError(f"no {noun} matches {selector!r}")
+
+
+def capability_display_name(capability: dict) -> str:
+    """Best human-readable label for a capability, falling back to its UUID.
+
+    `reference_id` is null on a workspace that has not renumbered its template
+    capabilities, so `template_reference_id` (RS-12-01-01) is the identifier
+    people actually see there.
+    """
+    return (
+        capability.get("name")
+        or capability.get("reference_id")
+        or capability.get("template_reference_id")
+        or capability.get("id", "")
+    )
+
+
+def list_capabilities() -> List[dict]:
+    """Fetch the workspace's solution capabilities via GET /solution-capabilities.
+
+    Returns [{"id", "name", "reference_id", "template_reference_id", "family",
+    "subfamily", "risk", "risk_family", "implementation_status",
+    "main_component", "functions"}] sorted by display name, where `functions` is
+    [{"type", "name", "narrative", "implementation_status"}] — the narratives
+    being the point of the call.
+
+    Raises RuntimeError with an actionable message on missing credentials, a
+    non-https endpoint, or a transport/HTTP failure.
+    """
+    payload = _workspace_get(_CAPABILITIES_PATH)
+    raw = payload.get("solutionCapabilities", []) if isinstance(payload, dict) else payload
+
+    capabilities = []
+    for c in raw:
+        if not isinstance(c, dict) or not c.get("id"):
+            continue
+        main = c.get("mainComponent") or {}
+        functions = []
+        for fn in c.get("functions") or []:
+            if not isinstance(fn, dict):
+                continue
+            functions.append({
+                "type": fn.get("type") or "",
+                "name": fn.get("name") or "",
+                # The narrative is a template until someone fills it in, and an
+                # unfilled one still carries #PLACEHOLDER tokens. Passed through
+                # verbatim: deciding whether it says anything is the reader's job.
+                "narrative": fn.get("narrative") or "",
+                "implementation_status": fn.get("implementationStatus") or "",
+            })
+        capabilities.append({
+            "id": c["id"],
+            "name": c.get("name") or "",
+            "reference_id": c.get("referenceId") or "",
+            "template_reference_id": c.get("templateReferenceId") or "",
+            "family": c.get("family") or "",
+            "subfamily": c.get("subfamily") or "",
+            "risk": c.get("risk") or "",
+            "risk_family": c.get("riskFamily") or "",
+            "implementation_status": c.get("implementationStatus") or "",
+            "main_component": (main.get("name") or "") if isinstance(main, dict) else "",
+            "functions": functions,
+        })
+    capabilities.sort(key=lambda c: capability_display_name(c).lower())
+    return capabilities
+
+
+def capability_narratives(capability: dict) -> List[dict]:
+    """The capability's functions that actually carry narrative text.
+
+    Most capabilities have three functions and only one or two are written, so
+    a reader (or a validator author) wants the written ones without scanning
+    past the empty ones.
+    """
+    return [f for f in capability.get("functions") or [] if (f.get("narrative") or "").strip()]
+
+
+def resolve_capability(capabilities: List[dict], selector: str) -> dict:
+    """Resolve one capability from a user-supplied id, reference id, or name."""
+    return _resolve_workspace_item(
+        capabilities, selector, capability_display_name, "capability",
+        ("id", "reference_id", "template_reference_id"),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Paramify workspace — evidence sets and their artifacts
+#
+# `paramify evidence <path>` reads a file this repo produced. These read the
+# other direction: what is already attached in the workspace, including
+# artifacts nobody here collected (a customer upload, another team's fetcher).
+# That is the only way to author a validator for evidence this repo does not
+# generate.
+# --------------------------------------------------------------------------- #
+
+def evidence_set_display_name(evidence_set: dict) -> str:
+    """Best label for an evidence set. The reference id leads: EVD-IAM-MFA is
+    how a set is named in fetcher.yaml, in the registry, and in conversation —
+    the UI name is prose and not stable."""
+    return (
+        evidence_set.get("reference_id")
+        or evidence_set.get("name")
+        or evidence_set.get("id", "")
+    )
+
+
+def list_evidence_sets() -> List[dict]:
+    """Fetch the workspace's evidence sets via GET /evidence.
+
+    Returns [{"id", "reference_id", "name", "description", "instructions",
+    "artifact_count", "automated", "frequency"}] sorted by display name.
+    `artifact_count` is what says whether there is anything here to author
+    against at all.
+    """
+    payload = _workspace_get(_EVIDENCE_SETS_PATH)
+    raw = payload.get("evidences", []) if isinstance(payload, dict) else payload
+
+    sets = []
+    for e in raw:
+        if not isinstance(e, dict) or not e.get("id"):
+            continue
+        sets.append({
+            "id": e["id"],
+            "reference_id": e.get("referenceId") or "",
+            "name": e.get("name") or "",
+            "description": e.get("description") or "",
+            "instructions": e.get("instructions") or "",
+            "artifact_count": e.get("artifactCount") or 0,
+            # Derived server-side from whether a validator is attached; read-only.
+            "automated": bool(e.get("automated")),
+            "frequency": e.get("frequency") or "",
+        })
+    sets.sort(key=lambda e: evidence_set_display_name(e).lower())
+    return sets
+
+
+def resolve_evidence_set(sets: List[dict], selector: str) -> dict:
+    """Resolve one evidence set from a user-supplied id, reference id, or name."""
+    return _resolve_workspace_item(
+        sets, selector, evidence_set_display_name, "evidence set",
+        ("id", "reference_id"),
+    )
+
+
+def list_artifacts(evidence_set_id: str) -> List[dict]:
+    """Fetch one evidence set's artifacts via GET /evidence/{id}/artifacts.
+
+    Returns [{"id", "title", "file_name", "file_type", "is_url", "created_at",
+    "created_by", "effective_date", "download_url", "validators"}] newest
+    first. `download_url` is a presigned S3 link that expires in about an hour,
+    so it is fetched, not stored.
+    """
+    payload = _workspace_get(f"{_EVIDENCE_SETS_PATH}/{evidence_set_id}/artifacts")
+    raw = payload.get("artifacts", []) if isinstance(payload, dict) else payload
+
+    artifacts = []
+    for a in raw:
+        if not isinstance(a, dict) or not a.get("id"):
+            continue
+        creator = a.get("createdBy") or {}
+        validators = []
+        for v in a.get("validators") or []:
+            if isinstance(v, dict):
+                validators.append({"name": v.get("name") or "", "result": v.get("result") or ""})
+        artifacts.append({
+            "id": a["id"],
+            "title": a.get("title") or "",
+            "file_name": a.get("originalFileName") or "",
+            "file_type": a.get("fileType") or "",
+            # A pasted link, not an uploaded file: there is nothing to download.
+            "is_url": bool(a.get("isUrl")),
+            "created_at": a.get("createdAt") or "",
+            "created_by": (creator.get("username") or creator.get("email") or "")
+                          if isinstance(creator, dict) else "",
+            "effective_date": a.get("effectiveDate") or "",
+            "download_url": a.get("pathname") or "",
+            "validators": validators,
+        })
+    artifacts.sort(key=lambda a: a.get("created_at") or "", reverse=True)
+    return artifacts
+
+
+def _artifact_filename(evidence_set: dict, artifact: dict) -> str:
+    """A stable, collision-free local name: the set's reference id, the
+    artifact's id, and the original extension. Named for the set rather than the
+    uploaded filename because two sets routinely carry `evidence.json`."""
+    stem = (evidence_set_display_name(evidence_set) or "artifact").replace("/", "_")
+    suffix = Path(artifact.get("file_name") or "").suffix
+    if not suffix:
+        suffix = {
+            "application/json": ".json", "text/csv": ".csv", "application/pdf": ".pdf",
+            "text/plain": ".txt", "application/xml": ".xml", "text/xml": ".xml",
+        }.get(artifact.get("file_type") or "", "")
+    return f"{stem}_{artifact['id'][:8]}{suffix}"
+
+
+def pull_artifact(evidence_set: dict, artifact: dict, dest_dir) -> dict:
+    """Download one artifact to `dest_dir` and report what landed.
+
+    Returns {"path", "bytes", "file_type", "enveloped", "artifact_id",
+    "evidence_set"}. `enveloped` is the fact a validator author needs before
+    reading any further: an artifact is only this repo's envelope shape when
+    someone uploaded it from here, and a workspace is full of PDFs and
+    screenshots that no regex validator can be authored against.
+
+    Raises RuntimeError with an actionable message; ValueError when the artifact
+    is a pasted URL rather than a file.
+    """
+    import requests  # local, as elsewhere on the network path
+
+    if artifact.get("is_url"):
+        raise ValueError(
+            f"artifact {artifact['id']} is a link, not a file "
+            f"({artifact.get('download_url') or 'no target'}) — nothing to download"
+        )
+    url = artifact.get("download_url")
+    if not url:
+        raise RuntimeError(f"artifact {artifact['id']} has no download target")
+
+    dest = Path(dest_dir).expanduser()
+    dest.mkdir(parents=True, exist_ok=True)
+    path = dest / _artifact_filename(evidence_set, artifact)
+
+    # No Authorization header. The URL is already presigned, and S3 rejects a
+    # request carrying both signatures ("Only one auth mechanism allowed") — so
+    # reusing _workspace_get here would fail on every artifact.
+    try:
+        with requests.get(url, stream=True, timeout=_ARTIFACT_DOWNLOAD_TIMEOUT) as resp:
+            if resp.status_code != 200:
+                raise RuntimeError(
+                    f"downloading artifact {artifact['id']} failed "
+                    f"(HTTP {resp.status_code}); the presigned link expires after "
+                    f"about an hour — re-list the artifacts to get a fresh one"
+                )
+            written = 0
+            with open(path, "wb") as fh:
+                for chunk in resp.iter_content(chunk_size=64 * 1024):
+                    written += len(chunk)
+                    if written > _ARTIFACT_MAX_BYTES:
+                        fh.close()
+                        path.unlink(missing_ok=True)
+                        raise RuntimeError(
+                            f"artifact {artifact['id']} exceeds "
+                            f"{_ARTIFACT_MAX_BYTES // (1024 * 1024)} MB — refusing to pull"
+                        )
+                    fh.write(chunk)
+    except requests.RequestException as e:
+        path.unlink(missing_ok=True)
+        raise RuntimeError(f"could not download artifact {artifact['id']}: {e}") from e
+
+    # "Not enveloped" is confusing on its own: an older or hand-built artifact
+    # can carry schema_version and metadata and still not be readable as one.
+    # Say which keys are missing so the verdict is actionable rather than flat.
+    enveloped, missing = False, []
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        enveloped = is_enveloped(doc)
+        if not enveloped and isinstance(doc, dict):
+            missing = sorted(ENVELOPE_KEYS - set(doc.keys()))
+    except (ValueError, OSError, UnicodeDecodeError):
+        pass  # not JSON, or not readable as text: not our envelope
+
+    return {
+        "path": str(path),
+        "bytes": written,
+        "file_type": artifact.get("file_type") or "",
+        "enveloped": enveloped,
+        "missing_envelope_keys": missing,
+        "artifact_id": artifact["id"],
+        "evidence_set": evidence_set_display_name(evidence_set),
+    }
 
 
 def effective_config(

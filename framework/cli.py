@@ -27,6 +27,11 @@ Paramify workspace (live lookups; needs PARAMIFY_API_TOKEN with read scope):
   paramify assessments list [--type VULNERABILITY|CONFIGURATION] [--json]
   paramify assessments select [fetcher ...] [--assessment NAME|ID] [-f FILE] [--json]
                            # points issue-report fetchers at an assessment
+  paramify capabilities list [--family NAME] [--json]
+  paramify capabilities show <name|id> [--json]   # the narrative a validator must prove
+  paramify artifacts list [evidence-set] [--json] # omit the set to list every set
+  paramify artifacts pull <evidence-set> [--artifact ID] [-o DIR] [--json]
+                           # downloads real workspace evidence into ./evidence/pulled
 
 Manifest editing (writes the manifest file; -f/--file, default ./manifest.yaml;
 every subcommand accepts --json, emitting {"ok", "path", "errors"}):
@@ -124,6 +129,20 @@ assessments_app = typer.Typer(
     help="List the workspace's assessments and point issue-report fetchers at one.",
 )
 app.add_typer(assessments_app, name="assessments")
+
+capabilities_app = typer.Typer(
+    no_args_is_help=True,
+    context_settings=_HELP_OPTS,
+    help="Read the workspace's solution capabilities and the narratives they claim.",
+)
+app.add_typer(capabilities_app, name="capabilities")
+
+artifacts_app = typer.Typer(
+    no_args_is_help=True,
+    context_settings=_HELP_OPTS,
+    help="List and download the artifacts already attached to evidence sets.",
+)
+app.add_typer(artifacts_app, name="artifacts")
 
 issues_app = typer.Typer(
     no_args_is_help=True,
@@ -2013,6 +2032,276 @@ def assessments_select(
                 f"  + {use}  ->  {api.assessment_display_name(chosen)} ({chosen['id']})"
             )
     _save_and_report(m, path, root, json_out, verb="Updated")
+
+
+# --------------------------------------------------------------------------- #
+# Capabilities — read the narrative a validator is supposed to prove
+# --------------------------------------------------------------------------- #
+
+def _capabilities_or_exit(json_out: bool) -> List[dict]:
+    try:
+        return api.list_capabilities()
+    except RuntimeError as e:
+        _fail(None, str(e), json_out)
+
+
+def _capability_ref(c: dict) -> str:
+    """The identifier to show beside the name. A workspace that has not
+    renumbered its template capabilities serves referenceId as null, so the
+    template id is the only one there is."""
+    return c["reference_id"] or c["template_reference_id"] or ""
+
+
+@capabilities_app.command("list")
+def capabilities_list(
+    family: Optional[str] = typer.Option(
+        None, "--family", "-F", help="Only capabilities in this family (case-insensitive substring)"
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON"),
+):
+    """List the solution capabilities in the Paramify workspace."""
+    capabilities = _capabilities_or_exit(json_out)
+    if family:
+        needle = family.lower()
+        capabilities = [
+            c for c in capabilities
+            if needle in (c["family"] or "").lower() or needle in (c["subfamily"] or "").lower()
+        ]
+    if json_out:
+        typer.echo(json.dumps({"ok": True, "capabilities": capabilities}, indent=2))
+        return
+    if not capabilities:
+        scope = f" in family matching {family!r}" if family else ""
+        typer.echo(f"No solution capabilities{scope} found in this workspace.")
+        return
+    width = max(len(api.capability_display_name(c)) for c in capabilities)
+    n = len(capabilities)
+    typer.echo(f"{n} {'capability' if n == 1 else 'capabilities'}:\n")
+    for c in capabilities:
+        ref = _capability_ref(c)
+        written = len(api.capability_narratives(c))
+        bits = [b for b in (ref, c["family"], c["implementation_status"]) if b]
+        bits.append(f"{written} narrative{'' if written == 1 else 's'}")
+        typer.echo(
+            f"  {api.capability_display_name(c):<{width}}  "
+            + style.dim(f"[{', '.join(bits)}]")
+        )
+    typer.echo(style.dim("\n  paramify capabilities show <name|id> — the narrative text"))
+
+
+@capabilities_app.command("show")
+def capabilities_show(
+    capability: str = typer.Argument(..., help="Capability name, reference id, or UUID"),
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON"),
+):
+    """Show one capability and the narratives it claims.
+
+    The narrative is the sentence a validator has to substantiate, so this is
+    the input to authoring one — not the fetcher's description, which says what
+    was collected rather than what it is meant to prove.
+    """
+    capabilities = _capabilities_or_exit(json_out)
+    try:
+        chosen = api.resolve_capability(capabilities, capability)
+    except (LookupError, ValueError) as e:
+        _fail(None, str(e), json_out)
+    if json_out:
+        typer.echo(json.dumps({"ok": True, "capability": chosen}, indent=2))
+        return
+
+    typer.echo(style.head(api.capability_display_name(chosen)))
+    ref = _capability_ref(chosen)
+    for label, value in (
+        ("reference", ref),
+        ("id", chosen["id"]),
+        ("family", " / ".join(b for b in (chosen["family"], chosen["subfamily"]) if b)),
+        ("risk", " / ".join(b for b in (chosen["risk_family"], chosen["risk"]) if b)),
+        ("component", chosen["main_component"]),
+        ("status", chosen["implementation_status"]),
+    ):
+        if value:
+            typer.echo(f"  {label:<10} {value}")
+
+    written = api.capability_narratives(chosen)
+    if not written:
+        typer.echo(style.warn("\n  No narrative written on this capability yet."))
+        typer.echo(style.dim("  There is no claim to validate against until one is."))
+        return
+    typer.echo("")
+    for fn in written:
+        header = " · ".join(b for b in (fn["type"], fn["name"]) if b)
+        typer.echo(style.name(f"  {header}"))
+        for line in textwrap.wrap(fn["narrative"], width=76) or [""]:
+            typer.echo(f"    {line}")
+        typer.echo("")
+
+
+# --------------------------------------------------------------------------- #
+# Artifacts — what is already attached in the workspace
+#
+# The mirror of `paramify upload`: read back what is on an evidence set,
+# including artifacts this repo never produced. `paramify evidence <path>`
+# stays the local-file reader.
+# --------------------------------------------------------------------------- #
+
+_PULL_DIR = "./evidence/pulled"
+
+
+def _evidence_sets_or_exit(json_out: bool) -> List[dict]:
+    try:
+        return api.list_evidence_sets()
+    except RuntimeError as e:
+        _fail(None, str(e), json_out)
+
+
+def _resolve_set_or_exit(sets: List[dict], selector: str, json_out: bool) -> dict:
+    try:
+        return api.resolve_evidence_set(sets, selector)
+    except (LookupError, ValueError) as e:
+        _fail(None, str(e), json_out)
+
+
+def _artifacts_or_exit(evidence_set_id: str, json_out: bool) -> List[dict]:
+    try:
+        return api.list_artifacts(evidence_set_id)
+    except RuntimeError as e:
+        _fail(None, str(e), json_out)
+
+
+def _artifact_line(a: dict) -> str:
+    """One artifact's headline. Validator verdicts are deliberately NOT folded in
+    here: a set under active authoring carries four or five, and crammed onto one
+    line they are the least readable part of the output."""
+    bits = [b for b in (a["file_type"], (a["created_at"] or "")[:10], a["created_by"]) if b]
+    label = a["title"] or a["file_name"] or a["id"]
+    return f"{label}  " + style.dim(f"[{', '.join(bits)}]" if bits else "")
+
+
+@artifacts_app.command("list")
+def artifacts_list(
+    evidence_set: Optional[str] = typer.Argument(
+        None, help="Evidence set reference id, name, or UUID. Omit to list every set."
+    ),
+    with_artifacts: bool = typer.Option(
+        False, "--with-artifacts", "-w",
+        help="Only sets that have at least one artifact (most of a workspace is empty)",
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON"),
+):
+    """List an evidence set's artifacts, or every evidence set with its count.
+
+    With no argument this is the picker: which sets have anything attached at
+    all. With one, it is that set's artifacts, newest first.
+    """
+    sets = _evidence_sets_or_exit(json_out)
+
+    if evidence_set is None:
+        total = len(sets)
+        if with_artifacts:
+            sets = [e for e in sets if e["artifact_count"]]
+        if json_out:
+            typer.echo(json.dumps({"ok": True, "evidence_sets": sets}, indent=2))
+            return
+        if not sets:
+            scope = " with artifacts" if with_artifacts else ""
+            typer.echo(f"No evidence sets{scope} found in this workspace.")
+            return
+        width = max(len(api.evidence_set_display_name(e)) for e in sets)
+        scope = f" of {total} have artifacts" if with_artifacts else ""
+        typer.echo(f"{len(sets)} evidence set(s){scope}:\n")
+        for e in sets:
+            n = e["artifact_count"]
+            note = f"{n} artifact{'' if n == 1 else 's'}" if n else "empty"
+            name = e["name"] if e["name"] and e["name"] != e["reference_id"] else ""
+            typer.echo(
+                f"  {api.evidence_set_display_name(e):<{width}}  "
+                + style.dim(f"[{note}]")
+                + (f"  {name}" if name else "")
+            )
+        hint = "  paramify artifacts list <set> — the artifacts on one set"
+        if not with_artifacts and total and len(sets) == total:
+            hint += "\n  -w — only the sets that have any"
+        typer.echo(style.dim("\n" + hint))
+        return
+
+    chosen = _resolve_set_or_exit(sets, evidence_set, json_out)
+    artifacts = _artifacts_or_exit(chosen["id"], json_out)
+    if json_out:
+        typer.echo(json.dumps(
+            {"ok": True, "evidence_set": chosen, "artifacts": artifacts}, indent=2
+        ))
+        return
+    label = api.evidence_set_display_name(chosen)
+    if not artifacts:
+        typer.echo(f"{label} has no artifacts attached.")
+        return
+    typer.echo(f"{label} — {len(artifacts)} artifact(s), newest first:\n")
+    for a in artifacts:
+        typer.echo(f"  {_artifact_line(a)}")
+        typer.echo(style.dim(f"    {a['id']}"))
+        for v in a["validators"]:
+            if v["result"]:
+                typer.echo(f"    {style.verdict(v['result'] == 'PASS', v['result']):<6} {v['name']}")
+
+
+@artifacts_app.command("pull")
+def artifacts_pull(
+    evidence_set: str = typer.Argument(..., help="Evidence set reference id, name, or UUID"),
+    artifact: Optional[str] = typer.Option(
+        None, "--artifact", "-a", help="Artifact UUID (default: the newest on the set)"
+    ),
+    out: str = typer.Option(
+        _PULL_DIR, "-o", "--out",
+        help=f"Directory to write into (default {_PULL_DIR}, gitignored)",
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Emit JSON"),
+):
+    """Download one artifact from an evidence set to a local file.
+
+    Writes under ./evidence/ — gitignored, and outside the run-* tree so a
+    pulled artifact is never mistaken for a local run. What lands is real
+    workspace evidence: it carries account ids and resource names, so it stays
+    out of commits and out of validator case files.
+    """
+    sets = _evidence_sets_or_exit(json_out)
+    chosen = _resolve_set_or_exit(sets, evidence_set, json_out)
+    artifacts = _artifacts_or_exit(chosen["id"], json_out)
+    if not artifacts:
+        _fail(None, f"{api.evidence_set_display_name(chosen)} has no artifacts to pull", json_out)
+
+    if artifact:
+        match = next((a for a in artifacts if a["id"] == artifact), None)
+        if match is None:
+            _fail(None, f"no artifact {artifact!r} on {api.evidence_set_display_name(chosen)}", json_out)
+    else:
+        match = artifacts[0]  # list_artifacts sorts newest first
+
+    try:
+        result = api.pull_artifact(chosen, match, out)
+    except (RuntimeError, ValueError) as e:
+        _fail(None, str(e), json_out)
+
+    if json_out:
+        typer.echo(json.dumps({"ok": True, **result}, indent=2))
+        return
+
+    base_url, _ = paramify_auth.resolve_base_url()
+    where = paramify_auth.describe_base_url(base_url)
+    kb = max(1, result["bytes"] // 1024)
+    typer.echo(
+        f"{style.ok('Pulled')} {result['evidence_set']} artifact "
+        f"{style.dim(result['artifact_id'])} from {where}"
+    )
+    typer.echo(f"  {style.path(result['path'])}  ({kb} KB, {result['file_type'] or 'unknown type'})")
+    if result["enveloped"]:
+        typer.echo(style.dim("  enveloped fetcher evidence — a regex validator can be authored against it"))
+    else:
+        missing = result.get("missing_envelope_keys") or []
+        why = f" (missing {', '.join(missing)})" if missing else ""
+        typer.echo(style.warn(
+            f"  not an enveloped fetcher artifact{why} — a regex validator authored "
+            "here would run against a shape this repo does not produce"
+        ))
 
 
 # --------------------------------------------------------------------------- #

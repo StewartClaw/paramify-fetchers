@@ -17,7 +17,10 @@ logger = logging.getLogger("framework.envelope")
 
 ENVELOPE_SCHEMA_VERSION = "1.0"
 _ERROR_TAIL_CHARS = 4000
-_ENVELOPE_KEYS = {"schema_version", "metadata", "payload"}
+# Public: callers that report *why* something is not enveloped need the set,
+# not just the boolean.
+ENVELOPE_KEYS = {"schema_version", "metadata", "payload"}
+_ENVELOPE_KEYS = ENVELOPE_KEYS  # back-compat for in-module use
 
 
 def is_enveloped(obj) -> bool:
