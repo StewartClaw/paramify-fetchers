@@ -49,7 +49,7 @@ azure-mgmt-resource>=26.0.0,<27
 
 # Storage, networking, Defender for Cloud.
 azure-mgmt-storage>=25.1.0,<26
-azure-mgmt-network>=31.0.1,<33
+azure-mgmt-network>=31.0.1,<34
 azure-mgmt-security>=7.0.0,<8
 
 # Identity and access. msgraph-sdk pulls msgraph-core, the microsoft-kiota-*
