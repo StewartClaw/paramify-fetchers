@@ -83,7 +83,7 @@ WORKLOAD_RULE_MARKERS = ("instance", "fnfunc", "autonomousdatabase", "resource.c
 
 _STATEMENT = re.compile(
     r"^(?P<action>allow|endorse|admit)\s+(?P<subject>.+?)\s+to\s+"
-    r"(?:(?P<verb>inspect|read|use|manage)\s+(?P<resource>\S+(?:\s+\S+)*?)|(?P<permissions>\{[^}]*\}))"
+    r"(?:(?P<verb>inspect|read|use|manage)\s+(?P<resource>\S.*?)|(?P<permissions>\{[^}]*\}))"
     r"\s+in\s+(?P<location>any-tenancy|tenancy(?:\s+\S+)?|compartment\s+(?:id\s+)?\S+)"
     r"(?:\s+where\s+(?P<where>.+))?$",
     re.IGNORECASE,
