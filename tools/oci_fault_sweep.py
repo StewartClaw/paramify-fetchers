@@ -49,12 +49,10 @@ TOLERATED_OK = {"identity.list_region_subscriptions"}
 
 
 def _signing_key() -> str:
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
+    sys.path.insert(0, str(REPO / "tests"))
+    from oci_test_key import throwaway_signing_key
 
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    return key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL,
-                             serialization.NoEncryption()).decode()
+    return throwaway_signing_key()
 
 
 def run_one(name: str, key: str, kind: str, signing_key: str, workdir: Path) -> dict:

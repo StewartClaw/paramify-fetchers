@@ -36,6 +36,9 @@ FETCHER_ROOT = REPO_ROOT / "fetchers" / "oci"
 CASSETTE_DIR = FETCHER_ROOT / "tests" / "cassettes"
 BOOTSTRAP = REPO_ROOT / "tests" / "oci_replay_bootstrap"
 
+sys.path.insert(0, str(REPO_ROOT / "tests"))
+from oci_test_key import throwaway_signing_key  # noqa: E402
+
 pytest.importorskip("oci", reason="the OCI SDK deserializes the recorded responses")
 
 FETCHERS = sorted(
@@ -66,20 +69,8 @@ REQUIRED_SUMMARY_KEY = {
 
 @pytest.fixture(scope="session")
 def signing_key(tmp_path_factory) -> str:
-    """A throwaway RSA key, so request signing runs for real under replay.
-
-    Generated per session and never written to the repo — the point is that the
-    suite needs no credentials at all, not that it ships a fake one.
-    """
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    return key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=serialization.NoEncryption(),
-    ).decode()
+    """A throwaway RSA key, so request signing runs for real under replay."""
+    return throwaway_signing_key()
 
 
 def run_fetcher(name: str, signing_key: str, evidence_dir: Path, **extra_env):
