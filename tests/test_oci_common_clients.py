@@ -47,6 +47,22 @@ def test_a_target_region_overrides_the_config_file_region(clean_env, tmp_path):
     assert auth["config"]["region"] == "us-ashburn-1"
 
 
+def test_oci_config_file_wins_over_an_existing_home_config(clean_env, tmp_path):
+    """The SDK falls back to OCI_CONFIG_FILE only when ~/.oci/config is absent.
+    A host with both collected as whoever ~/.oci/config names — typically an
+    administrator — while the deployment believed it ran as the collector."""
+    home = tmp_path / "home"
+    (home / ".oci").mkdir(parents=True)
+    decoy = _config_file(home / ".oci", region="eu-frankfurt-1")
+    decoy.rename(home / ".oci" / "config")
+    chosen = tmp_path / "chosen"
+    chosen.mkdir()
+    clean_env.setenv("HOME", str(home))
+    clean_env.setenv("OCI_CONFIG_FILE", str(_config_file(chosen, region="us-sanjose-1")))
+    auth = oci_common.load_config(oci_common.Collector(oci_common.logging.getLogger("t")))
+    assert auth["config"]["region"] == "us-sanjose-1"
+
+
 def test_the_config_file_region_is_used_when_no_target_names_one(clean_env, tmp_path):
     clean_env.setenv("OCI_CONFIG_FILE", str(_config_file(tmp_path)))
     auth = oci_common.load_config(oci_common.Collector(oci_common.logging.getLogger("t")))

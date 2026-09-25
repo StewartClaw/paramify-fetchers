@@ -402,7 +402,11 @@ def load_config(collector: Collector) -> Dict[str, Any]:
     # OCI_CLI_PROFILE is the CLI's spelling and the SDK ignores it — see the
     # module docstring. Read it here so the documented env var actually works.
     profile = os.environ.get("OCI_CLI_PROFILE") or oci.config.DEFAULT_PROFILE
-    config = oci.config.from_file(profile_name=profile)
+    # Passed explicitly: the SDK reads OCI_CONFIG_FILE only when ~/.oci/config
+    # does NOT exist, so on a host with both, a deployment pointed at a
+    # restricted collector's config silently collected with ~/.oci/config.
+    location = os.environ.get("OCI_CONFIG_FILE") or oci.config.DEFAULT_LOCATION
+    config = oci.config.from_file(file_location=location, profile_name=profile)
     # A target's `region` arrives as OCI_REGION and must win over the profile's,
     # as it already does on the principal paths — otherwise a per-region fanout
     # target silently collects the profile's region every time.
