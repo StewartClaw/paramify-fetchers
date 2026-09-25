@@ -249,6 +249,15 @@ class _Fake:
 
 def _collect(monkeypatch, data):
     calls: list = []
+    # collect() imports the SDK only to name client classes, which the fake
+    # make_client ignores. A stand-in keeps these tests running in CI's general
+    # job, which does not install `oci`.
+    monkeypatch.setitem(sys.modules, "oci", SimpleNamespace(
+        identity=SimpleNamespace(IdentityClient=object),
+        operator_access_control=SimpleNamespace(
+            OperatorControlClient=object, OperatorControlAssignmentClient=object, AccessRequestsClient=object),
+        delegate_access_control=SimpleNamespace(DelegateAccessControlClient=object),
+    ))
     monkeypatch.setattr(oac, "make_client", lambda cls, auth: _Fake(calls, data))
     monkeypatch.setattr(oac, "walk_compartments", lambda *a, **k: [{"id": OURS, "name": "ours"}])
     monkeypatch.setattr(oac, "list_all", lambda fn, *a, **k: fn(*a, **k))
