@@ -8,7 +8,7 @@ tokens for OCI's own APIs, `startIndex`/`totalResults` for SCIM — and the
 evidence must come out identical.
 
 Proven to bite: making `list_all` return the first page only changes eleven of
-the sixteen fetchers' evidence here, and the other five through
+the seventeen fetchers' evidence here, and the other six through
 `compartments_scanned`; cutting the SCIM loop in `iam_password_policy` to one
 page changes its findings.
 """

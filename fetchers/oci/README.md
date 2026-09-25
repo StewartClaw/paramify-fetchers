@@ -1,6 +1,6 @@
 # Oracle Cloud Infrastructure
 
-Sixteen evidence fetchers over one OCI tenancy. Each resolves credentials, walks
+Seventeen evidence fetchers over one OCI tenancy. Each resolves credentials, walks
 the compartment tree beneath a chosen root, collects one evidence set, and writes
 a JSON file to `$EVIDENCE_DIR`.
 
@@ -20,6 +20,7 @@ a JSON file to `$EVIDENCE_DIR`.
 | `oci_iam_users_credentials` | MFA, tenancy administrators, and every standing credential with its age | IAM-APM, IAM-SNU, IAM-ELP |
 | `oci_network_exposure` | What the rules allow, and whether anything can actually reach it | CNA-RNT, CNA-MAT, MLA-LET |
 | `oci_object_storage_buckets` | Bucket access including pre-authenticated requests, keys, and data logging | SVC-SIN, IAM-ELP, MLA-LET |
+| `oci_operator_access_control` | Whether Oracle's own staff need approval to reach Exadata infrastructure, and which requests were let through without a person | IAM-JIT, SCR-MIT |
 | `oci_vault_keys` | How each key is held and whether it is actually rotated | SVC-ASM, SVC-SIN |
 | `oci_zpr_policies` | Zero Trust Packet Routing: network intent as policy, and how loose it is | CNA-ULN, CNA-RNT |
 
@@ -32,7 +33,7 @@ key these fetchers authenticate with **is itself a finding in the evidence they
 produce**. It is also more privilege than they need: every call is a read.
 
 ```
-# Strictly read-only. Verified: all sixteen collect what a tenancy administrator
+# Strictly read-only. Verified: all seventeen collect what a tenancy administrator
 # collects, except the audit retention period (see below).
 Allow group EvidenceCollectors to inspect all-resources in tenancy
 Allow group EvidenceCollectors to read all-resources in tenancy where all {request.permission != 'OBJECT_READ', request.permission != 'SECRET_BUNDLE_READ'}
@@ -180,7 +181,7 @@ Oracle's models rather than about this code.
 
 ## Testing without a tenancy
 
-`tests/test_oci_fetchers.py` runs all sixteen as subprocesses against recorded
+`tests/test_oci_fetchers.py` runs all seventeen as subprocesses against recorded
 HTTP responses — no credentials, no network, about 11 seconds. Recording happens
 at the HTTP layer and replays through the real SDK, so deserialization, enum
 validation, pagination and the SDK's error classes all still run.
@@ -247,13 +248,13 @@ in this repo has an independent detector to check itself against.
 
 ## Verification status, precisely
 
-**Verified against a live tenancy** (Always Free, us-phoenix-1): all sixteen run
+**Verified against a live tenancy** (Always Free, us-phoenix-1): all seventeen run
 green — zero API failures, zero partial failures — scoped to the tenancy root
 and to a child compartment, deterministic across runs, and exiting non-zero with
 `code=auth_failed` on bad credentials. Every judgement has a mutation proven to
 fail its test. All nineteen claimed KSI IDs exist in the live FedRAMP catalog.
 
-**Verified as a restricted user**: all sixteen run under the two-statement
+**Verified as a restricted user**: all seventeen run under the two-statement
 policy above with evidence identical to an administrator's apart from the
 deliberately skipped retention period; object and secret contents denied. With
 `{AUDIT_CONFIGURATION}` added, identical outright.
@@ -263,7 +264,10 @@ handful of resources. Pagination is exercised on every list call by re-paging
 the recorded responses, not against thousands of real records. Full Stack DR
 pairs protection groups across two regions and the trial tenancy has one, so
 `oci_dr_plan_executions` is verified against Oracle's models and empty
-responses only, as its module docstring says.
+responses only, as its module docstring says. The same holds for
+`oci_operator_access_control`: Operator and Delegate Access Control govern
+Exadata resources, which no trial tenancy can create, so its request shapes are
+live-verified and its record fields are checked against the SDK models.
 
 Application Dependency Management IS verified live, against three real Maven
 audits (Log4Shell, Text4Shell, a vulnerable jackson-databind): one plain, one

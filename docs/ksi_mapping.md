@@ -236,7 +236,7 @@ python tools/gen_ksi_mapping.py
 
 *Controls:* `ac-2`, `ac-2.1`, `ac-2.2`, `ac-2.3`, `ac-2.4`, `ac-2.6`, `ac-3`, `ac-4`, `ac-5`, `ac-6`, `ac-6.1`, `ac-6.2`, `ac-6.5`, `ac-6.7`, `ac-6.9`, `ac-6.10`, `ac-7`, `ac-20.1`, `ac-17`, `au-9.4`, `cm-5`, `cm-7`, `cm-7.2`, `cm-7.5`, `cm-9`, `ia-4`, `ia-4.4`, `ia-7`, `ps-2`, `ps-3`, `ps-4`, `ps-5`, `ps-6`, `ps-9`, `ra-5.5`, `sc-2`, `sc-23`, `sc-39`
 
-*4 fetchers:* [`aws_iam_identity_center`](../fetchers/aws/iam_identity_center), [`azure_entra_conditional_access_policies`](../fetchers/azure/entra_conditional_access_policies), [`oci_bastion_sessions`](../fetchers/oci/bastion_sessions), [`okta_just_in_time_authorization`](../fetchers/okta/just_in_time_authorization)
+*5 fetchers:* [`aws_iam_identity_center`](../fetchers/aws/iam_identity_center), [`azure_entra_conditional_access_policies`](../fetchers/azure/entra_conditional_access_policies), [`oci_bastion_sessions`](../fetchers/oci/bastion_sessions), [`oci_operator_access_control`](../fetchers/oci/operator_access_control), [`okta_just_in_time_authorization`](../fetchers/okta/just_in_time_authorization)
 
 #### ✅ `KSI-IAM-SNU` — Securing Non-User Authentication
 
@@ -370,7 +370,7 @@ python tools/gen_ksi_mapping.py
 
 *Controls:* `ac-20`, `ra-3.1`, `sa-9`, `sa-10`, `sa-11`, `sa-15.3`, `sa-22`, `si-7.1`, `sr-5`, `sr-6`, `ca-7.4`, `sc-18`
 
-*1 fetcher:* [`oci_dependency_vulnerabilities`](../fetchers/oci/dependency_vulnerabilities)
+*2 fetchers:* [`oci_dependency_vulnerabilities`](../fetchers/oci/dependency_vulnerabilities), [`oci_operator_access_control`](../fetchers/oci/operator_access_control)
 
 #### ✅ `KSI-SCR-MON` — Monitoring Supply Chain Risk
 
@@ -426,7 +426,7 @@ python tools/gen_ksi_mapping.py
 
 ## By fetcher
 
-195 of 198 fetchers carry a mapping.
+196 of 199 fetchers carry a mapping.
 
 ### aws  (80)
 
@@ -633,7 +633,7 @@ python tools/gen_ksi_mapping.py
 | [`knowbe4_module_based_summary`](../fetchers/knowbe4/module_based_summary) | `KSI-CED-RAT` |
 | [`knowbe4_security_awareness_training`](../fetchers/knowbe4/security_awareness_training) | `KSI-CED-RAT` |
 
-### oci  (16)
+### oci  (17)
 
 | Fetcher | Indicators |
 |---|---|
@@ -651,6 +651,7 @@ python tools/gen_ksi_mapping.py
 | [`oci_iam_users_credentials`](../fetchers/oci/iam_users_credentials) | `KSI-IAM-APM`, `KSI-IAM-ELP`, `KSI-IAM-SNU` |
 | [`oci_network_exposure`](../fetchers/oci/network_exposure) | `KSI-CNA-MAT`, `KSI-CNA-RNT`, `KSI-MLA-LET` |
 | [`oci_object_storage_buckets`](../fetchers/oci/object_storage_buckets) | `KSI-IAM-ELP`, `KSI-MLA-LET`, `KSI-SVC-SIN` |
+| [`oci_operator_access_control`](../fetchers/oci/operator_access_control) | `KSI-IAM-JIT`, `KSI-SCR-MIT` |
 | [`oci_vault_keys`](../fetchers/oci/vault_keys) | `KSI-SVC-ASM`, `KSI-SVC-SIN` |
 | [`oci_zpr_policies`](../fetchers/oci/zpr_policies) | `KSI-CNA-RNT`, `KSI-CNA-ULN` |
 

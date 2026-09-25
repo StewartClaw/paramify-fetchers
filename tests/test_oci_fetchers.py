@@ -62,6 +62,7 @@ REQUIRED_SUMMARY_KEY = {
     "iam_users_credentials": "total_users",
     "network_exposure": "internet_ingress_rules",
     "object_storage_buckets": "total_buckets",
+    "operator_access_control": "provider_access_requests",
     "vault_keys": "total_keys",
     "zpr_policies": "zpr_enabled",
 }

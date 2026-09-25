@@ -120,7 +120,7 @@ jobs:
       # No credentials and no network: the fetchers run as subprocesses against
       # recorded HTTP responses (fetchers/oci/tests/cassettes), replayed through
       # the real SDK, so deserialization, pagination and the SDK's error classes
-      # all still run. ~11s for all sixteen.
+      # all still run. ~11s for all seventeen.
       - name: pytest (OCI fetchers, cross-check, SDK surface)
         # A glob, not a list: two SDK-dependent test files added later were in no
         # list, so they skipped in `test` and ran nowhere.

@@ -163,6 +163,23 @@ FUNCTION_MODELS: Dict[Tuple[str, str], Tuple[str, str]] = {
     ("iam_users_credentials", "credential_record"): ("identity", "AuthToken"),
     ("iam_users_credentials", "scim_user"): ("identity_domains", "User"),
     ("iam_users_credentials", "scim_credential"): ("identity_domains", "AuthToken"),
+    # Each control/assignment transform reads the list summary as `summary` and
+    # the full GET as `full`; the full model is declared as the nested receiver.
+    ("operator_access_control", "operator_control_record"): (
+        "operator_access_control", "OperatorControlSummary",
+    ),
+    ("operator_access_control", "assignment_record"): (
+        "operator_access_control", "OperatorControlAssignmentSummary",
+    ),
+    ("operator_access_control", "access_request_record"): (
+        "operator_access_control", "AccessRequestSummary",
+    ),
+    ("operator_access_control", "delegation_control_record"): (
+        "delegate_access_control", "DelegationControlSummary",
+    ),
+    ("operator_access_control", "delegated_request_record"): (
+        "delegate_access_control", "DelegatedResourceAccessRequestSummary",
+    ),
 }
 
 # Fields a record function reads off a NESTED dict it pulled out of the parent,
@@ -298,6 +315,15 @@ NESTED_MODELS: Dict[Tuple[str, str], List[Tuple[str, str, str]]] = {
     ],
     ("block_volume_encryption", "backup_record"): [
         ("_boot", "core", "BootVolumeBackup"),
+    ],
+    ("operator_access_control", "operator_control_record"): [
+        ("full", "operator_access_control", "OperatorControl"),
+    ],
+    ("operator_access_control", "assignment_record"): [
+        ("full", "operator_access_control", "OperatorControlAssignment"),
+    ],
+    ("operator_access_control", "delegation_control_record"): [
+        ("full", "delegate_access_control", "DelegationControl"),
     ],
     ("vault_keys", "key_record"): [
         ("rotation", "key_management", "AutoKeyRotationDetails"),
