@@ -27,13 +27,17 @@ Three of the four fetchers measure *specific* groups and campaigns, so they need
 
 `knowbe4_module_based_summary` reports on whatever the tenant has, so it needs no config and works against any tenant as-is.
 
-To find the exact titles to use:
+To find the exact titles to use, run `knowbe4_discovery`: it lists every group,
+training campaign, module, policy and phishing campaign the key can see, without
+any config, and `paramify discovery render` turns the result into a page you
+can filter and copy exact names from. It is
+never uploaded. Or ask the API directly:
 
 ```bash
 curl -s -H "Authorization: Bearer $KNOWBE4_API_KEY" \
-  "https://${KNOWBE4_REGION}.api.knowbe4.com/v1/groups?page=1" | jq -r '.[].name'
+  "https://${KNOWBE4_REGION}.api.knowbe4.com/v1/groups?per_page=500&cursor=0" | jq -r '.data[].name'
 curl -s -H "Authorization: Bearer $KNOWBE4_API_KEY" \
-  "https://${KNOWBE4_REGION}.api.knowbe4.com/v1/training/campaigns?page=1" | jq -r '.[].name'
+  "https://${KNOWBE4_REGION}.api.knowbe4.com/v1/training/campaigns?per_page=500&cursor=0&exclude_percentages=true" | jq -r '.data[].name'
 ```
 
 ### What happens when a name does not match

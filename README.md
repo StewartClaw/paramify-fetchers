@@ -422,6 +422,20 @@ Because the pipeline reads the file as the whole estate, `paramify upload` sends
 an inventory only when the run collected all of it. See
 [`docs/inventory_fetchers.md`](docs/inventory_fetchers.md).
 
+### See what a platform has (discovery)
+
+A third kind of fetcher, `kind: discovery`, lists what a set of credentials can
+see in a platform (groups, campaigns, projects and so on) and whether each could
+be read. It is never uploaded; it helps you decide which fetchers to run and how
+to configure them.
+
+```bash
+paramify run manifest.yaml                    # → run-<ts>/discovery/<fetcher>.json
+paramify discovery render evidence/run-<ts>   # → a self-contained HTML review page beside each document
+```
+
+KnowBe4 and AWS have one today (`knowbe4_discovery`, `aws_discovery`). See [`docs/discovery.md`](docs/discovery.md).
+
 ### Show how evidence is generated (optional)
 
 Beyond the evidence itself, you can push each fetcher's **entry script** to
