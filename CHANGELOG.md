@@ -438,6 +438,31 @@ schemas and the `paramify` CLI — not the internal code.
   failed call leaves every flag and total derived from it null rather than
   false or 0, so an unanswered call never reads as "off".
 
+- **Three Azure Application Gateway fetchers.** All three are Reader-only and
+  fan out per subscription. They share `_shared/app_gateway.py`, which fails
+  the run when `list_all` returns a different number of gateways than Resource
+  Graph counts.
+  - `azure_app_gateway_tls_listeners` (`EVD-AZURE-APPGW-TLS-LISTENERS`): every
+    L7 and L4 listener, with its protocol, a public or private frontend,
+    whether a plain-HTTP listener only redirects to HTTPS, and the effective
+    minimum TLS version along with where it comes from. The source is the SSL
+    profile, then the gateway's `sslPolicy`, then the default predefined policy.
+  - `azure_app_gateway_backend_tls` (`EVD-AZURE-APPGW-BACKEND-TLS`): every
+    backend setting, with its protocol, whether the certificate chain and SNI
+    are validated, its trusted roots and its probe protocol, plus which rules
+    use it. Only settings that are in use count towards the totals.
+  - `azure_app_gateway_waf` (`EVD-AZURE-APPGW-WAF`): the WAF that applies to
+    each HTTP(S) listener. A path rule's policy overrides the listener's, which
+    overrides the gateway's, which overrides the legacy configuration. The
+    fetcher reports whether that WAF is enabled in Prevention mode, and each
+    policy's disabled managed rules, exclusions and rate-limit rules. A policy
+    in another subscription is read with a direct GET; one that can't be read
+    makes the result null, never "enforcing".
+
+  These fetchers were run against a live subscription with one gateway. SSL
+  profiles, attached WAF policies and L4 listeners have not yet been
+  exercised against live data.
+
 ### Changed
 
 - **The TUI keeps evidence and scan reports apart.** The catalog and the
