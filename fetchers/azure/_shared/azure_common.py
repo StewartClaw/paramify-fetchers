@@ -60,6 +60,17 @@ def resource_group_from_id(resource_id: Optional[str]) -> Optional[str]:
     return None
 
 
+def arm_id_key(resource_id: Optional[str]) -> str:
+    """ARM ids are case-insensitive and Azure mixes spellings (seen live); compare on this."""
+    return str(resource_id or "").lower()
+
+
+def vnet_id_of(subnet_id: Optional[str]) -> str:
+    """Lower-cased VNet id from a subnet (or subnet child) id; empty when there is none."""
+    key = arm_id_key(subnet_id)
+    return key.split("/subnets/")[0] if "/subnets/" in key else ""
+
+
 def dig(obj: Any, *path: str) -> Any:
     """Walk a nested dict by keys, tolerating a missing link at any level."""
     cur = obj

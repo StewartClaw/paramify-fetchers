@@ -12,6 +12,27 @@ schemas and the `paramify` CLI — not the internal code.
 
 ### Added
 
+- **`azure_vnet_egress_routing`** (`EVD-AZURE-VNET-EGRESS`) — where each subnet's
+  and network interface's Internet-bound traffic goes, as `egress_path`: an
+  appliance, a black hole, a gateway, a NAT gateway, or Azure's implicit default
+  outbound access (`default_outbound_access_effective` reads an unset subnet flag
+  as on). An appliance next hop is resolved to what holds it (`appliance_owner`):
+  an Azure Firewall, an IP-forwarding NIC, or something outside the subscription.
+  Subnets connected to a Virtual WAN hub with routing intent resolve to the hub's
+  firewall when the connection propagates the default route. Each subnet also lists
+  its own and its peers' address ranges that are not forced through the appliance.
+  Every route table says whether a subnet uses it, and every Azure Firewall carries
+  its tier, policy, effective threat-intelligence mode and the subnets routed
+  through it. Configured routes only: effective routes need an action Reader does
+  not have. A hub in another subscription is not seen, so its spokes read
+  `default_outbound`. Tested read-only against a production subscription, where
+  every count matched Resource Graph.
+- **`azure_ddos_protection`** (`EVD-AZURE-DDOS`) — every public IP, what holds it,
+  its virtual network and its `effective_protection`: `network_protection` (a DDoS
+  plan on the VNet), `ip_protection`, `none`, `disabled`, or `unknown` where the
+  VNet cannot be resolved (load balancer frontends, NAT gateways). Also every DDoS
+  protection plan and the VNets that use it. Virtual WAN hub firewall addresses are
+  not public IP resources and are not listed.
 - **Default custom tags on everything the uploaders create.** Every evidence
   set, script and validator that `paramify upload`, `paramify scripts sync`
   and `paramify validators sync` create or maintain now carries two custom

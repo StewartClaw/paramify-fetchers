@@ -1,0 +1,103 @@
+name: azure_vnet_egress_routing
+version: 0.1.0
+description: >
+  Where each subnet's Internet-bound traffic goes: through a firewall or network
+  virtual appliance, into a black hole, to a VPN/ExpressRoute gateway, out a NAT
+  gateway, or straight out through Azure's implicit default outbound access. Each
+  subnet carries its route table, default route, default-outbound setting and
+  service endpoints, plus which of its own and its peers' address ranges are not
+  forced through the appliance; each network interface carries its own egress path
+  and default-outbound flag; every route table shows whether any subnet uses it; and
+  every Azure Firewall shows its tier, effective threat-intelligence mode, policy and
+  how many subnets actually route through it.
+category: azure
+
+supports_targets: true
+
+runtime:
+  type: python
+  entry: fetcher.py
+
+output:
+  type: json
+  path: azure_vnet_egress_routing.json
+  aggregation: per_target
+
+target_schema:
+  subscription_id:
+    type: string
+    required: false
+    env: AZURE_SUBSCRIPTION_ID
+    description: >
+      Azure subscription id to collect from. Optional — omit to use the first
+      enabled subscription the ambient credential can see ("collect where
+      deployed"); set one target per subscription to fan out.
+  environment:
+    type: string
+    required: false
+    env: AZURE_ENVIRONMENT
+    description: >
+      Deployment environment label (e.g. prod / preprod) written into the evidence
+      metadata. Optional — set per target for multi-subscription runs.
+
+secrets: []          # DefaultAzureCredential only — no handed-over secret (see _categories/azure.yaml)
+
+ksis:
+  - KSI-CNA-RNT   # every subnet's Internet egress path, and what bypasses the appliance
+  - KSI-CNA-ULN   # forced tunnelling through an Azure Firewall or appliance via route tables
+  - KSI-CNA-DFP   # route tables and default-outbound settings define what traffic may leave
+
+evidence_set:
+  reference_id: EVD-AZURE-VNET-EGRESS
+  name: Azure VNet Egress Routing
+  instructions: >
+    Script: fetcher.py. Azure SDK calls (azure-mgmt-network NetworkManagementClient),
+    all reads, Reader is sufficient: virtual_networks.list_all(),
+    virtual_network_peerings.list() per VNet, route_tables.list_all(),
+    network_interfaces.list_all(), azure_firewalls.list_all(),
+    firewall_policies.list_all(), virtual_hubs.list() and, per Virtual WAN hub,
+    routing_intent.list(), hub_virtual_network_connections.list() and
+    hub_route_tables.list(); plus the Microsoft.Network registration state.
+    Virtual WAN: a spoke VNet connected to a hub learns the hub's 0.0.0.0/0 when the
+    hub has an Internet routing-intent policy (or, without routing intent, a 0.0.0.0/0
+    route in the route table the connection is associated with) and the connection's
+    enableInternetSecurity ("Propagate default route") is true; that route reaches a
+    subnet only while its route table allows gateway route propagation, and a
+    user-defined 0.0.0.0/0 beats it. Such a subnet is "appliance" with
+    default_route.source "virtual_hub", next_hop_resource_id the policy's next hop, and
+    appliance_owner "azure_firewall" (or "hub_appliance" for an NVA). The default route
+    is not advertised across hubs, so only the directly connected hub counts; a hub in
+    another subscription is not seen.
+    egress_path per subnet is derived from the subnet's route table, IPv4 only: a
+    user-defined 0.0.0.0/0 route to VirtualAppliance or VirtualApplianceEcmp is
+    "appliance", to None is "blackhole", to VirtualNetworkGateway is "gateway", any
+    other non-Internet hop is "other". With no such route (Azure's system route sends
+    0.0.0.0/0 to the Internet) or a route to Internet, a NAT gateway on the subnet or
+    the VNet's default public NAT gateway gives "nat_gateway"; otherwise
+    default_outbound_access decides: null or true is "default_outbound" (null
+    implicitly allows outbound, so default_outbound_access_effective reports it as
+    true), false is "none". GatewaySubnet, AzureBastionSubnet, AzureFirewallSubnet,
+    AzureFirewallManagementSubnet and RouteServerSubnet are "platform_managed" — Azure
+    sets their routing rules. A network interface takes its subnet's path, except that
+    one with a public IP on a "default_outbound" or "none" subnet is "public_ip".
+    For a user-defined route, appliance_owner says what holds each appliance next-hop IP, looked up in the
+    subnet's VNet, its Connected peers and any Virtual WAN hub firewall:
+    "azure_firewall" (appliance_firewall_ids names it), "nic_ip_forwarding" (a NIC
+    with IP forwarding enabled), "nic_no_ip_forwarding", "mixed" (firewall and
+    forwarding NIC), or "not_in_subscription" when nothing here holds it (another
+    subscription, a load balancer frontend). Each Azure Firewall's
+    effective_threat_intel_mode is its firewall policy's threatIntelMode when it has
+    a policy — the firewall's own field is not used then — and its own
+    threatIntelMode otherwise; a policy in another subscription leaves it null with
+    firewall_policy_resolved false. routed_workload_subnets counts the subnets whose
+    0.0.0.0/0 route resolves to that firewall. unrouted_internal_prefixes and unrouted_peered_prefixes
+    list the VNet's own and its Connected peers' address ranges that the route table
+    does not send to an appliance: Azure's system routes for those ranges are more
+    specific than 0.0.0.0/0, so that traffic skips the appliance unless a route at
+    least as specific covers it. service_endpoints are listed because their system
+    routes cannot be overridden by any route table. Limitations: this is the
+    configured routing, not the effective route table — BGP routes from a gateway
+    (bgp_route_propagation true) and load balancer outbound rules are not visible,
+    and reading effective routes needs
+    Microsoft.Network/networkInterfaces/effectiveRouteTable/action, which Reader does
+    not grant. Maps to KSI-CNA-RNT / KSI-CNA-ULN / KSI-CNA-DFP.

@@ -23,6 +23,7 @@ from azure_common import (  # noqa: E402
     REGISTRATION_UNKNOWN,
     Collector,
     arm_client_kwargs,
+    arm_id_key,
     build_payload,
     classify_failure_code,
     coverage_percentage,
@@ -204,12 +205,7 @@ def virtual_network_record(vnet: dict) -> dict:
     }
 
 
-def _arm_id_key(resource_id) -> str:
-    """ARM ids are case-insensitive, and Azure does not keep one spelling: an NSG's
-    back-reference to a subnet and the VNet's own subnet id differ in case (seen
-    live). Compare on this, never on the raw string.
-    """
-    return str(resource_id or "").lower()
+_arm_id_key = arm_id_key
 
 
 def network_interface_record(nic: dict, subnet_nsg_by_id: dict) -> dict:
