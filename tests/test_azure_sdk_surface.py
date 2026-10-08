@@ -221,7 +221,15 @@ REQUIRED_SURFACE: list[tuple[str, str, str | None, list[Method], str]] = [
         "azure/diagnostic_settings, azure/container_registry_configuration, "
         "azure/redis_cache_configuration, "
         "azure/app_service_configuration, azure/key_vault_configuration, "
-        "azure/sql_managed_instance_configuration",
+        "azure/sql_managed_instance_configuration, "
+        "azure/resource_diagnostic_settings",
+    ),
+    (
+        "azure.mgmt.monitor",
+        "MonitorManagementClient",
+        "diagnostic_settings_category",
+        ["list"],
+        "azure/resource_diagnostic_settings — which resources emit logs",
     ),
     (
         "azure.mgmt.monitor",
@@ -781,13 +789,23 @@ REQUIRED_SURFACE: list[tuple[str, str, str | None, list[Method], str]] = [
         ["list"],
         "azure/log_analytics_workspaces — Sentinel onboarding (SecurityInsights)",
     ),
+    # --- raw ARM GETs for what azure-mgmt-monitor 6.x pages or models wrong ----
+    (
+        "azure.mgmt.core",
+        "ARMPipelineClient",
+        None,
+        ["send_request"],
+        "_shared/arm_rest — azure/alert_rules, azure/activity_log_alerts "
+        "(action groups, alert processing rules)",
+    ),
     # --- Resource Graph: the inventory query sits on the client itself --------
     (
         "azure.mgmt.resourcegraph",
         "ResourceGraphClient",
         None,
         ["resources"],
-        "azure/resource_inventory, azure/front_door_origins (origin regions)",
+        "azure/resource_inventory, azure/front_door_origins (origin regions), "
+        "azure/resource_diagnostic_settings",
     ),
     # --- app platform --------------------------------------------------------
     (
@@ -1501,14 +1519,15 @@ REQUIRED_MODEL_FIELDS: list[tuple[str, str, list[str], str]] = [
         "azure.mgmt.resourcegraph.models",
         "QueryRequestOptions",
         ["skip_token", "top", "result_format"],
-        "azure/resource_inventory — paging; without skip_token the inventory "
-        "stops at the first 1000 resources",
+        "azure/resource_inventory, azure/resource_diagnostic_settings — paging; "
+        "without skip_token the inventory stops at the first 1000 resources",
     ),
     (
         "azure.mgmt.resourcegraph.models",
         "QueryResponse",
         ["skip_token", "total_records", "result_truncated", "data"],
-        "azure/resource_inventory — the page loop and its completeness check",
+        "azure/resource_inventory, azure/resource_diagnostic_settings — the page "
+        "loop and its completeness check",
     ),
     (
         "azure.mgmt.loganalytics.models",
@@ -1557,6 +1576,13 @@ REQUIRED_MODEL_FIELDS: list[tuple[str, str, list[str], str]] = [
         "azure/sql_managed_instance_configuration — monitor 6.x flattens "
         "`properties`; an unflattened release reads every vault as having no "
         "audit-log destination",
+    ),
+    (
+        "azure.mgmt.monitor.models",
+        "DiagnosticSettingsCategoryResource",
+        ["category_type", "category_groups"],
+        "azure/resource_diagnostic_settings — Logs vs Metrics decides the coverage "
+        "denominator; category_groups decides which categories `audit` covers",
     ),
     (
         "azure.mgmt.monitor.models",

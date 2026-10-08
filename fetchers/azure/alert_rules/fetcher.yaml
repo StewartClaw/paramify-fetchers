@@ -1,0 +1,76 @@
+name: azure_alert_rules
+version: 0.1.0
+description: >
+  Every Azure Monitor metric alert, log search (scheduled query) alert and smart
+  detector alert rule in the subscription — enabled state, severity, scopes, the
+  metric criteria or KQL query it fires on — resolved through its action groups to
+  the receivers it actually notifies, and checked against alert processing rules that
+  suppress notifications or add action groups. Per rule: whether it routes to an
+  enabled receiver, whether a processing rule suppresses it, and whether it reaches a
+  person. Activity log alerts are a separate evidence set (azure_activity_log_alerts).
+category: azure
+
+supports_targets: true
+
+runtime:
+  type: python
+  entry: fetcher.py
+
+output:
+  type: json
+  path: azure_alert_rules.json
+  aggregation: per_target
+
+target_schema:
+  subscription_id:
+    type: string
+    required: false
+    env: AZURE_SUBSCRIPTION_ID
+    description: >
+      Azure subscription id to collect from. Optional — omit to use the first
+      enabled subscription the ambient credential can see ("collect where
+      deployed"); set one target per subscription to fan out.
+  environment:
+    type: string
+    required: false
+    env: AZURE_ENVIRONMENT
+    description: >
+      Deployment environment label (e.g. prod / preprod) written into the evidence
+      metadata. Optional — set per target for multi-subscription runs.
+secrets: []          # DefaultAzureCredential only — no handed-over secret (see _categories/azure.yaml)
+
+ksis:
+  - KSI-MLA-RVL
+
+evidence_set:
+  reference_id: EVD-AZURE-ALERT-RULES
+  name: Azure Monitor Alert Rules
+  instructions: >
+    Script: fetcher.py. Reader (or Monitoring Reader) at subscription scope. Raw ARM
+    GETs through azure-mgmt-core's ARMPipelineClient, following nextLink to the end
+    (results.pages_read): Microsoft.Insights/metricAlerts (api 2018-03-01),
+    Microsoft.Insights/scheduledQueryRules (2023-12-01),
+    microsoft.alertsManagement/smartDetectorAlertRules (2021-04-01),
+    Microsoft.Insights/actionGroups (2023-01-01) and
+    Microsoft.AlertsManagement/actionRules — alert processing rules (2021-08-08).
+    REST rather than azure-mgmt-monitor 6.x, which drops nextLink on metric alerts and
+    action groups and reads log alerts in the 2018 schema. A provider that is not
+    registered is skipped and reported in provider_registration_status. Per rule:
+    enabled (smart detector state == Enabled); is_alerting_rule is false only for
+    LogToMetric log rules. action_group_ids come from actions[].actionGroupId (metric),
+    actions.actionGroups[] (log search) or actionGroups.groupIds[] (smart detector),
+    and are resolved in resolved_action_groups; groups in another subscription are fetched by id, and stay unresolved
+    (unresolved_action_group_ids) on 403/404. A group is deliverable when enabled and
+    holding at least one enabled receiver — email and SMS receivers count only with
+    status Enabled; other receiver types carry no status. Receiver targets omit URL
+    paths and query strings (webhook host only; Logic App / Function resource ids, not
+    callback URLs) and mask phone numbers to the last four digits. A processing rule
+    applies when enabled, its schedule is not known to be inactive, and one of its
+    scopes contains one of the rule's scopes. An applicable RemoveAllActionGroups rule
+    with no conditions and a schedule known to be active (or none) sets suppressed
+    true; one with conditions or an undecidable schedule (recurrences, non-UTC zone
+    near its edges) sets suppressed null. AddActionGroups rules of the first kind add
+    their groups (added_by_processing_rule). routes_to_enabled_receiver: enabled and
+    any deliverable group. reaches_human: routes_to_enabled_receiver and suppressed is
+    false. muteActionsDuration (log) and throttling.duration (smart detector) are
+    reported as mute_actions_duration, not evaluated.
