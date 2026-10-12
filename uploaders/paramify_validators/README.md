@@ -3,7 +3,7 @@
 Pushes validators from the central [`validators/`](../../validators/) registry to
 Paramify and associates them to evidence sets. Runs as a stage after evidence
 upload (the evidence sets it associates to should already exist). See
-[`docs/validators_design.md`](../../docs/validators_design.md).
+[`docs/validators_guide.md`](../../docs/validators_guide.md).
 
 ## What it does, per validator
 
@@ -54,7 +54,7 @@ Paramify after its id is cached.
   (`MATCH_COUNT EQUALS 0 -> ERROR` plus `exit_code NOT_EQUALS 0 -> ERROR`)
   therefore degrades into two contradictory pass-requirements, and the validator
   returns FAIL on every input including clean evidence. The registry authors the
-  positive form instead — see `docs/validators_design.md`. Nothing here needs to
+  positive form instead — see `docs/validators_guide.md`, step 4. Nothing here needs to
   change when the API is fixed; the validators migrate, not the syncer.
 
 - If a validator is **renamed** in Paramify *before* its id is cached, the
