@@ -215,7 +215,7 @@ single confirmation before building.
    recorded only there cannot reach `metadata.error`. Do record it there as well
    though — `metadata.partial_failure` plus `metadata.api_failures[]` of
    `{operation, type, message}`, that shape exactly — so the evidence file is
-   honest to whoever opens it. See `docs/fetcher_contract.md` § Output.
+   honest to whoever opens it. See `docs/fetcher_contract_guide.md` step 5.
 
 7. If bash: `chmod +x fetchers/<category>/<short_name>/fetcher.sh`.
 

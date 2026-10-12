@@ -127,7 +127,7 @@ manifest, runs it, and reviews evidence — all without leaving the keyboard:
 **Sending scan reports** (Nessus, Wiz, STIG results and the like) into Paramify
 pipelines is its own short setup — a manifest for the scanners, an assessment and
 close policy for each, then send from the Paramify tab. The walkthrough, with
-recordings, is [`docs/pipelines.md`](docs/pipelines.md).
+recordings, is [`docs/pipelines_guide.md`](docs/pipelines_guide.md).
 
 > **Zero-credential first run:** the bundled `demo_hello` fetcher emits synthetic
 > evidence, so you can watch the whole collect → envelope pipeline before wiring
@@ -422,6 +422,19 @@ Because the pipeline reads the file as the whole estate, `paramify upload` sends
 an inventory only when the run collected all of it. See
 [`docs/inventory_fetchers.md`](docs/inventory_fetchers.md).
 
+### See what a platform has (discovery)
+
+A third kind of fetcher, `kind: discovery`, lists what a set of credentials can
+see in a platform (groups, campaigns, projects and so on) and whether each could
+be read. It is never uploaded; it helps you decide which fetchers to run and how
+to configure them.
+
+```bash
+paramify run manifest.yaml                    # → run-<ts>/discovery/<fetcher>.json
+```
+
+KnowBe4 and AWS have one today (`knowbe4_discovery_beta`, `aws_discovery_beta`). See [`docs/discovery.md`](docs/discovery.md).
+
 ### Show how evidence is generated (optional)
 
 Beyond the evidence itself, you can push each fetcher's **entry script** to
@@ -440,8 +453,8 @@ script's `description` and the `fetcher.yaml` `version`, with a sha256 drift gua
 uploader it talks Paramify REST v0 over HTTPS only and reads
 `PARAMIFY_UPLOAD_API_TOKEN`. See
 [`uploaders/paramify_scripts/README.md`](uploaders/paramify_scripts/README.md) for
-the full model, or [`docs/uploader_design.md`](docs/uploader_design.md) for how it
-fits alongside evidence upload.
+the full model, or [`docs/uploader_guide.md`](docs/uploader_guide.md#5-sync-scripts-and-validators-optional)
+for how it fits alongside evidence upload.
 
 ---
 
@@ -577,7 +590,7 @@ Directories starting with `_` are not fetchers — the runner skips them.
 
 ## Adding a fetcher
 
-To add evidence collection for a new control or a new tool, see [`docs/authoring_fetcher_guide.md`](docs/authoring_fetcher_guide.md). If nothing covers that platform yet and you want a whole slate rather than one fetcher, start from [`docs/platform_onboarding.md`](docs/platform_onboarding.md). If the tool already produces the findings — a vulnerability scan or a CSPM export — you want an issue-report fetcher instead: [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md).
+To add evidence collection for a new control or a new tool, see [`docs/authoring_a_fetcher.md`](docs/authoring_a_fetcher.md). If nothing covers that platform yet and you want a whole slate rather than one fetcher, start from [`docs/platform_onboarding_guide.md`](docs/platform_onboarding_guide.md). If the tool already produces the findings — a vulnerability scan or a CSPM export — you want an issue-report fetcher instead: [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md).
 
 ---
 
@@ -603,16 +616,19 @@ To add evidence collection for a new control or a new tool, see [`docs/authoring
 | [`fetchers/servicenow/README.md`](fetchers/servicenow/README.md) | ServiceNow service-account basic auth + the per-instance endpoint URLs |
 | [`uploaders/paramify_evidence/README.md`](uploaders/paramify_evidence/README.md) | Paramify API key setup + upload options |
 | [`uploaders/paramify_issues/README.md`](uploaders/paramify_issues/README.md) | Intaking raw scan reports into an assessment + why the file is never touched |
+| [`docs/pipelines_guide.md`](docs/pipelines_guide.md) | End-to-end: scan manifest → assessment + close policy → run → `paramify issues upload` → jobs and cycles → verify in Paramify |
 | [`uploaders/paramify_scripts/README.md`](uploaders/paramify_scripts/README.md) | Syncing fetcher entry scripts to Paramify + the association model |
 | [`docs/suggest_validator_guide.md`](docs/suggest_validator_guide.md) | End-to-end: API key → `/suggest-validator` → sync → verify validators in Paramify |
+| [`docs/validators_guide.md`](docs/validators_guide.md) | By hand: write a validator and its cases → `paramify validators check` → sync → verify in Paramify |
 | [`docs/uploader_design.md`](docs/uploader_design.md) | How the three uploaders work + the shared evidence-set identity model |
-| [`docs/authoring_fetcher_guide.md`](docs/authoring_fetcher_guide.md) | End-to-end, one worked example: template → `fetcher.yaml` → `fetcher.py` → fake-credential smoke test → run → read the evidence |
-| [`docs/platform_onboarding.md`](docs/platform_onboarding.md) | Onboarding a platform nobody has integrated yet — the claim, the sandbox, and the gates |
+| [`docs/authoring_a_fetcher.md`](docs/authoring_a_fetcher.md) | Writing a new fetcher from scratch |
+| [`docs/platform_onboarding_guide.md`](docs/platform_onboarding_guide.md) | End-to-end: `/onboard-platform` through its four gates → commit the fetchers → publish to Paramify |
 | [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md) | The second kind of fetcher: raw scan reports → assessment issues |
-| [`docs/fetcher_contract.md`](docs/fetcher_contract.md) | The binding runner↔fetcher contract |
+| [`docs/fetcher_contract_guide.md`](docs/fetcher_contract_guide.md) | Checking one fetcher against the contract: discovery, declared env, a fake-credential run, the envelope, and the status file |
 | [`docs/ksi_mapping.md`](docs/ksi_mapping.md) | Which fetchers map to which FedRAMP KSIs, per indicator and per fetcher, plus open gaps |
+| [`docs/ksi_mapping_guide.md`](docs/ksi_mapping_guide.md) | Finding the fetchers that cover a KSI with `paramify ksi`, reading covered / gap / organizational, and declaring a fetcher's `ksis` |
 | [`docs/run_manifest_reference.md`](docs/run_manifest_reference.md) | Manifest format reference |
-| [`docs/config_injection_design.md`](docs/config_injection_design.md) | Platform/config/auth model |
+| [`docs/config_injection_guide.md`](docs/config_injection_guide.md) | Walkthrough: look up a fetcher's keys → set platform config, fetcher config, and secrets in a manifest → validate → see them reach the fetcher |
 | [`docs/design.md`](docs/design.md) | Why the framework is shaped this way + current state of the work |
 | [`docs/versioning.md`](docs/versioning.md) | How we version, the contract, and what 1.0 means |
 | [`docs/releasing.md`](docs/releasing.md) | How a release is cut |
