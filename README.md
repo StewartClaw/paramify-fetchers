@@ -548,7 +548,7 @@ design (peering connections and endpoints are omitted above for brevity).
 > structured exit-code categories (still binary `0`/`1`, plus `124` for a runner
 > timeout-kill) are not built yet. Issue-report collection is built end to end —
 > contract, runner, uploader, template — and Wiz ships the first three vendor
-> fetchers in that category. See `docs/design.md` for what's deferred.
+> fetchers in that category.
 
 ---
 
