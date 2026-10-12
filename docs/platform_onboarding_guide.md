@@ -27,8 +27,7 @@ coverage"*. The screenshots are an example session for Snowflake.
 **Steps 1–3: you pick the claim.** Name the platform and the parts you care
 about. The agent recommends the capability whose narrative carries a number,
 because a validator needs something it can fail on. **Confirm it, or paste the
-claim** if your workspace's capabilities carry no narrative
-([why](platform_onboarding.md#where-the-claim-comes-from)).
+claim** if your workspace's capabilities carry no narrative.
 
 ![Example session: the agent offers three capabilities, recommends the 15-minute Session Termination narrative, and asks which is the claim](img/platform_onboarding/session-1-claim.png)
 
@@ -50,8 +49,7 @@ bailed, parked, cut, or reassigned
 **Step 7: you check the proof.** Fetcher #1 must collect the same number of
 objects as an independent count, and its validator must have been proven to
 fail. The agent predicts the real verdict before scoring it. **A surprise in
-either direction gets resolved before any sibling is built**
-([why one first](platform_onboarding.md#the-gates)).
+either direction gets resolved before any sibling is built.**
 
 ![Example session: populated and complete evidence, validator proof cases, and a predicted FAIL that matches the real FAIL](img/platform_onboarding/session-4-proof.png)
 
@@ -67,9 +65,9 @@ isn't done until you say whether the sandbox stays up.**
 ## 2. Check a gate yourself
 
 The agent keeps its state in `.onboarding/<platform>/`, which is gitignored
-([what's in it](platform_onboarding.md#state-on-disk)), and runs a checker over
-it at every gate. Run it yourself before you let the slate fan out.
-`--through` stops at a gate's stage. The last line names the first blocked
+([what's in it](../.claude/skills/onboard-platform/references/state.md)),
+and runs a checker over it at every gate. Run it yourself before you let the
+slate fan out. `--through` stops at a gate's stage. The last line names the first blocked
 stage, which is also where a later session resumes.
 
 ![check_onboarding.py snowflake --through build: every stage PASS, completeness 14 = 14, real verdict FAIL as predicted, Clean through: build](img/platform_onboarding/01-gate3-check.png)
@@ -89,8 +87,7 @@ onboarding reads *Clean through: close.*
 
 In the public repo, commit only `fetchers/<platform>/` and its category file,
 by explicit path, on a branch cut from `main`. New validators, and any edit to
-one already in `main`, stay off the branch
-([why](platform_onboarding.md#the-constraints)). The agent keeps a copy of them
+one already in `main`, stay off the branch. The agent keeps a copy of them
 in `.onboarding/<platform>/validators/`.
 
 ![git switch -c, git add of the two fetcher paths, git commit creating seven fetcher files, and git status showing the validator files left out](img/platform_onboarding/02-commit.png)
@@ -106,7 +103,7 @@ git status --short
 </details>
 
 **Working in your own private copy?** You may commit the validators too
-([private copy](private_mirror_workflow.md#4-organizing-your-work)).
+([the private-copy guide](private_mirror_guide.md#4-keep-your-work-on-your-own-main)).
 
 ## 4. Publish and verify
 
@@ -129,10 +126,4 @@ including attaching the shared `collection_succeeded` by hand.
 | `no teardown_decision in sandbox.json` | Tell the agent whether the sandbox stays up. A running one needs a review date. |
 | You rebuilt a torn-down sandbox | It's a new sandbox: Gates 2 and 4 apply again ([re-provisioning](../.claude/skills/onboard-platform/SKILL.md#closing-out--the-slate-is-not-done-until-the-sandbox-has-a-decision)). |
 
-**More detail:** [the skill](../.claude/skills/onboard-platform/SKILL.md) ·
-[why this flow exists](platform_onboarding.md#what-this-is-for) ·
-[the four gates](platform_onboarding.md#the-gates) ·
-[the constraints](platform_onboarding.md#the-constraints) ·
-[state on disk](platform_onboarding.md#state-on-disk) ·
-[running it without an agent](platform_onboarding.md#running-it-without-an-agent) ·
-[non-goals](platform_onboarding.md#non-goals)
+**More detail:** [the skill](../.claude/skills/onboard-platform/SKILL.md)
