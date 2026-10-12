@@ -1,8 +1,7 @@
 # Giving a fetcher its config and secrets
 
 A fetcher doesn't inherit your shell's environment. The runner injects its
-config and secrets from your manifest
-([why](config_injection_design.md)). This guide builds
+config and secrets from your manifest. This guide builds
 [`examples/with_platform_config.yaml`](../examples/with_platform_config.yaml)
 and runs it.
 
@@ -30,10 +29,9 @@ paramify describe rippling_all_employees
 
 ## 2. Set the values
 
-Platform config covers a category. An entry's `config` overrides it
-([merge order](config_injection_design.md#runner-behavior)). `set-secret`
-stores an env var name, never the value. AWS already passes both passthrough
-variables, so `set-passthrough` here only shows the syntax.
+Platform config covers a category. An entry's `config` overrides it.
+`set-secret` stores an env var name, never the value. AWS already passes both
+passthrough variables, so `set-passthrough` here only shows the syntax.
 
 ![The manifest builder writing each value, flagging the missing api_token secret until set-secret runs](img/config_injection/02-manifest.png)
 
@@ -92,6 +90,4 @@ paramify evidence evidence/run-<timestamp>/rippling_all_employees.json
 | `Secret reference ${env:…} could not be resolved` | Export that variable in the shell that runs `paramify`. |
 | `NOTE target selects AWS_PROFILE; ignored ambient credentials …` | Expected: a target's `profile:` overrides static AWS keys. Remove it to use them. |
 
-**More detail:** [why manifest values](config_injection_design.md#principle-unchanged) ·
-[where keys are declared](config_injection_design.md#two-homes-both-shipped) ·
-[platform block reference](run_manifest_reference.md#platform-block-runplatforms)
+**More detail:** [shared platform config](run_manifest_guide.md#4-set-shared-config-once)
