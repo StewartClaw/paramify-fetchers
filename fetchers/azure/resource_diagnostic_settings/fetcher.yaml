@@ -16,7 +16,7 @@ supports_targets: true
 runtime:
   type: python
   entry: fetcher.py
-  timeout: 1800
+  timeout: 3600
 
 output:
   type: json
@@ -57,12 +57,15 @@ evidence_set:
     accounts carry no resource logs themselves, so each one's
     {id}/blobServices/default, fileServices/default, queueServices/default and
     tableServices/default are added (synthesized_child: true) unless Resource Graph
-    already listed them. (2) Per resource, azure-mgmt-monitor<7
+    already listed them: only blobServices for kind BlobStorage and BlockBlobStorage,
+    only fileServices for FileStorage, all four for any other kind. (2) Per resource, azure-mgmt-monitor<7
     diagnostic_settings_category.list(resource_uri) (api 2021-05-01-preview): its
     "Logs" categories set emits_resource_logs, and log categories whose
     category_groups include "audit" are audit_log_categories. A type ARM refuses
-    diagnostics for is status "unsupported"; a resource deleted since enumeration is
-    "not_found"; any other error is status "error" and fails the run. (3) For each
+    diagnostics for (400 ResourceTypeNotSupported, "The resource type '<type>' does not
+    support diagnostic settings.") is status "unsupported", and the rest of that type
+    is marked unsupported without another call; a resource deleted since enumeration
+    is "not_found"; any other error is status "error" and fails the run. (3) For each
     resource that emits logs, diagnostic_settings.list(resource_uri). A setting
     exports_logs when it has at least one destination (an empty-string id counts as
     none) and at least one enabled log category or category group.
@@ -71,4 +74,6 @@ evidence_set:
     only. A category is captured when an exporting setting enables it by name, enables
     a group it belongs to, or enables allLogs; uncaptured_log_categories and
     captures_all_audit_categories follow from that. Metrics-only resources keep
-    has_enabled_log_setting null and are outside the coverage denominator.
+    has_enabled_log_setting null and are outside the coverage denominator. Run time:
+    about 14 resources per second with 4 workers (measured on ~1,000 resources), so
+    roughly 25 minutes per 20,000; the timeout is 3600 seconds.

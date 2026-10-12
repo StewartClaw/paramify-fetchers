@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 from urllib.parse import urlsplit
 
 ACTION_GROUP_API = "2023-01-01"
@@ -23,6 +24,17 @@ RECEIVER_ARRAYS = {
     "armRoleReceivers": "arm_role",
     "eventHubReceivers": "event_hub",
 }
+
+# Receivers that notify a person (an ARM role emails its members; ITSM opens a ticket in a worked queue).
+# Webhooks, Logic Apps, Functions, runbooks and Event Hubs hand off to code that may or may not.
+PERSON_RECEIVERS = frozenset({"email", "sms", "voice", "azure_app_push", "arm_role", "itsm"})
+
+ACTION_GROUP_ID = re.compile(
+    r"^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.insights/actiongroups/[^/?#]+$", re.IGNORECASE
+)
+
+SCOPE_FULL = "full"
+SCOPE_PARTIAL = "partial"
 
 SUPPRESS_ALL = "RemoveAllActionGroups"
 ADD_GROUPS = "AddActionGroups"
@@ -71,7 +83,7 @@ def action_group_record(raw: dict) -> dict:
                 "name": receiver.get("name"),
                 "target": receiver_target(kind, receiver),
                 "status": status,
-                # Only email and SMS carry a status; "not Enabled" means no communications.
+                # Only email and SMS carry a status; anything but Enabled (Disabled, NotSpecified) sends nothing.
                 "enabled": status == "Enabled" if status is not None else True,
             })
     unknown = sorted(k for k, v in props.items() if k.endswith("Receivers") and k not in RECEIVER_ARRAYS and v)
@@ -86,6 +98,7 @@ def action_group_record(raw: dict) -> dict:
         "enabled_receiver_count": len(live),
         "unrecognized_receiver_arrays": unknown,
         "deliverable": enabled and bool(live),
+        "notifies_people": enabled and any(r["type"] in PERSON_RECEIVERS for r in live),
     }
 
 
@@ -139,53 +152,112 @@ def processing_rule_record(raw: dict, now: datetime) -> dict:
     }
 
 
-def _in_scope(rule_scopes: Iterable[str], targets: Iterable[str]) -> bool:
-    for scope in rule_scopes:
-        prefix = scope.rstrip("/").lower()
-        for target in targets:
-            t = (target or "").lower()
-            if t == prefix or t.startswith(prefix + "/"):
-                return True
+def _norm(arm_id: Optional[str]) -> str:
+    return (arm_id or "").rstrip("/").lower()
+
+
+def _contains(outer: str, inner: str) -> bool:
+    return inner == outer or inner.startswith(outer + "/")
+
+
+def scope_match(rule_scopes: Iterable[str], alert_scopes: Iterable[str]) -> Optional[str]:
+    """SCOPE_FULL when the processing rule covers every alert scope, SCOPE_PARTIAL when only some of what the alert fires on."""
+    rule = [_norm(s) for s in rule_scopes if s]
+    alert = [_norm(s) for s in alert_scopes if s]
+    if not rule or not alert:
+        return None
+    if all(any(_contains(r, a) for r in rule) for a in alert):
+        return SCOPE_FULL
+    if any(_contains(r, a) or _contains(a, r) for r in rule for a in alert):
+        return SCOPE_PARTIAL
+    return None
+
+
+def matching_processing_rules(alert_scopes: list[str], rules: list[dict]) -> list[dict]:
+    """Enabled, possibly active rules overlapping the alert; applies_to_every_fire when they act on all its notifications."""
+    matches = []
+    for rule in rules:
+        if not rule["enabled"] or rule["active_now"] is False:
+            continue
+        match = scope_match(rule["scopes"], alert_scopes)
+        if match:
+            every_fire = match == SCOPE_FULL and rule["active_now"] is True and not rule["conditions"]
+            matches.append({"rule": rule, "scope_match": match, "applies_to_every_fire": every_fire})
+    return matches
+
+
+def _tri(groups: list[dict], has: Callable[[dict], bool]) -> Optional[bool]:
+    """True if a group on every notification has it; None if only an unresolved or sometimes-added group might."""
+    if any(g["found"] and g["applies_to_every_fire"] and has(g) for g in groups):
+        return True
+    if any(not g["found"] or (not g["applies_to_every_fire"] and has(g)) for g in groups):
+        return None
     return False
 
 
-def applicable_processing_rules(targets: list[str], rules: list[dict]) -> list[dict]:
-    """Enabled processing rules whose scope contains one of the alert's target resources."""
-    return [r for r in rules if r["enabled"] and r["active_now"] is not False and _in_scope(r["scopes"], targets)]
-
-
-def route(enabled: bool, group_ids: list[str], targets: list[str], groups: dict, rules: list[dict]) -> dict:
+def route(enabled: bool, group_ids: list[str], alert_scopes: list[str], groups: dict, rules: list[dict]) -> dict:
     """Resolve an alert rule's notification path; `groups` is keyed by lower-cased action group id."""
-    applicable = applicable_processing_rules(targets, rules)
-    certain = [r for r in applicable if r["active_now"] is True and not r["conditions"]]
-    added = sorted({g for r in certain for g in r["added_action_group_ids"]})
+    matches = matching_processing_rules(alert_scopes, rules)
+    own = {}
+    for gid in group_ids:
+        if gid:
+            own.setdefault(gid.lower(), gid)
+    added: dict = {}
+    for m in matches:
+        for gid in m["rule"]["added_action_group_ids"]:
+            key = gid.lower()
+            if key not in own:
+                prev = added.get(key)
+                added[key] = (prev[0] if prev else gid, m["applies_to_every_fire"] or bool(prev and prev[1]))
     resolved = []
-    for gid in sorted(set(group_ids) | set(added), key=str.lower):
-        group = groups.get(gid.lower())
+    for key in sorted(set(own) | set(added)):
+        group = groups.get(key)
         resolved.append({
-            "id": gid,
+            "id": own.get(key) or added[key][0],
             "found": group is not None,
-            "added_by_processing_rule": gid in added and gid not in group_ids,
+            "added_by_processing_rule": key not in own,
+            "applies_to_every_fire": key in own or added[key][1],
             "enabled": group["enabled"] if group else None,
             "deliverable": group["deliverable"] if group else None,
+            "notifies_people": group["notifies_people"] if group else None,
             "receivers": [r for r in group["receivers"] if r["enabled"]] if group else [],
         })
-    routes = enabled and any(g["deliverable"] for g in resolved)
-    suppressors = [r for r in applicable if r["suppresses_notifications"]]
-    if any(r in certain for r in suppressors):
+    routes = _tri(resolved, lambda g: g["deliverable"]) if enabled else False
+    to_person = _tri(resolved, lambda g: g["notifies_people"]) if enabled else False
+    suppressors = [m for m in matches if m["rule"]["suppresses_notifications"]]
+    if any(m["applies_to_every_fire"] for m in suppressors):
         suppressed = True
     elif suppressors:
         suppressed = None
     else:
         suppressed = False
+    if not enabled or routes is False or suppressed is True:
+        reaches = False
+    elif to_person is True and suppressed is False:
+        reaches = True
+    else:
+        reaches = None
     return {
         "resolved_action_groups": resolved,
         "unresolved_action_group_ids": [g["id"] for g in resolved if not g["found"]],
         "routes_to_enabled_receiver": routes,
-        "suppressed_by_processing_rules": [r["id"] for r in suppressors],
+        "routes_to_person": to_person,
+        "processing_rule_matches": [
+            {"id": m["rule"]["id"], "scope_match": m["scope_match"], "applies_to_every_fire": m["applies_to_every_fire"]}
+            for m in matches
+        ],
+        "suppressed_by_processing_rules": [m["rule"]["id"] for m in suppressors],
         "suppressed": suppressed,
-        "reaches_human": (routes and suppressed is False) if enabled else False,
+        "reaches_human": reaches,
     }
+
+
+def tri_state(values: Iterable[Optional[bool]]) -> Optional[bool]:
+    """All True → True; any False → False; otherwise None (some unknown)."""
+    values = list(values)
+    if any(v is False for v in values):
+        return False
+    return True if all(v is True for v in values) else None
 
 
 def collect_action_groups(rest, subscription_id: str) -> dict:
@@ -205,7 +277,8 @@ def fetch_action_group(rest, group_id: str) -> dict:
 def add_referenced_groups(rest, group_ids: Iterable[str], groups: dict, collector) -> None:
     """Fetch groups referenced from another subscription; 403/404 leave them unresolved, anything else is a failure."""
     for gid in sorted({g for g in group_ids if g}, key=str.lower):
-        if gid.lower() in groups:
+        # Anything but an ARM action group path stays unresolved rather than carrying the token elsewhere.
+        if gid.lower() in groups or not ACTION_GROUP_ID.match(gid):
             continue
         try:
             groups[gid.lower()] = fetch_action_group(rest, gid)

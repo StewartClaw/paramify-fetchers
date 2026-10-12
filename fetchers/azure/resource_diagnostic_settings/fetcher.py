@@ -50,21 +50,23 @@ INVENTORY_QUERY = (
 # Storage logs live only on these child services, which Resource Graph does not list.
 STORAGE_ACCOUNT_TYPE = "microsoft.storage/storageaccounts"
 STORAGE_CHILD_SERVICES = ("blobServices", "fileServices", "queueServices", "tableServices")
+# Premium blob and file accounts have one service; an unrecognized kind gets all four.
+STORAGE_SERVICES_BY_KIND = {
+    "blobstorage": ("blobServices",),
+    "blockblobstorage": ("blobServices",),
+    "filestorage": ("fileServices",),
+}
 
 STATUS_ASSESSED = "assessed"
 STATUS_UNSUPPORTED = "unsupported"
 STATUS_NOT_FOUND = "not_found"
 STATUS_ERROR = "error"
 
-# UNVERIFIED until measured: the error text ARM returns for a type without diagnostics.
-UNSUPPORTED_MARKERS = (
-    "does not support diagnostic",
-    "resourcetypenotsupported",
-    "resource type is not supported",
-    "diagnostic settings are not supported",
-)
+# Measured 2026-10-12 on 60+ types: 400 (ResourceTypeNotSupported) "The resource type '<type>' does not
+# support diagnostic settings." It names the type, so one answer holds for every resource of that type.
+UNSUPPORTED_MARKERS = ("resourcetypenotsupported", "does not support diagnostic settings")
 
-# ~25 reads/s with the SDK's 429 retry, matching ARM's per-principal refill rate.
+# Measured ~14 resources/s on ~1,000 resources; ARM refills reads at ~25/s per principal, and 429s are retried.
 WORKERS = 4
 
 
@@ -84,13 +86,13 @@ def inventory_record(row: dict) -> dict:
 
 
 def with_storage_children(resources: list[dict]) -> list[dict]:
-    """Add each storage account's blob/file/queue/table service unless already listed."""
+    """Add each storage account's blob/file/queue/table services that its kind has, unless already listed."""
     seen = {(r["id"] or "").lower() for r in resources}
     out = list(resources)
     for account in resources:
         if account["type"] != STORAGE_ACCOUNT_TYPE or not account["id"]:
             continue
-        for service in STORAGE_CHILD_SERVICES:
+        for service in STORAGE_SERVICES_BY_KIND.get((account["kind"] or "").lower(), STORAGE_CHILD_SERVICES):
             child_id = f"{account['id']}/{service}/default"
             if child_id.lower() in seen:
                 continue
@@ -232,7 +234,9 @@ def monitor_client(subscription_id, cred):
     return client
 
 
-def assess(monitor, collector: Collector, base: dict) -> dict:
+def assess(monitor, collector: Collector, base: dict, unsupported_types: set) -> dict:
+    if base["type"] in unsupported_types:
+        return resource_record(base, STATUS_UNSUPPORTED)
     uri = resource_uri(base["id"])
 
     def _read(operation, call):
@@ -250,6 +254,8 @@ def assess(monitor, collector: Collector, base: dict) -> dict:
         lambda: [project_category(c) for c in monitor.diagnostic_settings_category.list(resource_uri=uri)],
     )
     if status:
+        if status == STATUS_UNSUPPORTED and base["type"]:
+            unsupported_types.add(base["type"])
         return resource_record(base, status)
     if not any(c["category_type"] == CATEGORY_TYPE_LOGS for c in categories):
         return resource_record(base, STATUS_ASSESSED, categories)
@@ -295,8 +301,9 @@ def main() -> int:
             "monitor.MonitorManagementClient (init)", lambda: monitor_client(subscription_id, cred)
         )
         if monitor is not None and resources:
+            unsupported_types: set = set()
             with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-                records = list(pool.map(lambda r: assess(monitor, collector, r), resources))
+                records = list(pool.map(lambda r: assess(monitor, collector, r, unsupported_types), resources))
         elif resources:
             records = [resource_record(r, STATUS_ERROR) for r in resources]
     elif not subscription_id:

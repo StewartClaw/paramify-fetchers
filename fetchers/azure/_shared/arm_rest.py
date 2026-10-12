@@ -31,6 +31,11 @@ def arm_rest_client(cred):
 
 
 def get_json(client, url: str) -> Dict[str, Any]:
+    endpoint = arm_endpoint().rstrip("/").lower()
+    relative = url.startswith("/") and not url.startswith("//")
+    if not relative and not url.lower().startswith(endpoint + "/"):
+        raise ValueError(f"refusing to send the ARM token outside {endpoint}: {url[:120]}")
+
     from azure.core.exceptions import HttpResponseError  # lazy
     from azure.core.rest import HttpRequest
     from azure.mgmt.core.exceptions import ARMErrorFormat

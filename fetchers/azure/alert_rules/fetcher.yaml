@@ -60,17 +60,29 @@ evidence_set:
     LogToMetric log rules. action_group_ids come from actions[].actionGroupId (metric),
     actions.actionGroups[] (log search) or actionGroups.groupIds[] (smart detector),
     and are resolved in resolved_action_groups; groups in another subscription are fetched by id, and stay unresolved
-    (unresolved_action_group_ids) on 403/404. A group is deliverable when enabled and
+    (unresolved_action_group_ids) on 403/404; an id that is not an ARM action group
+    path is never fetched and stays unresolved. A group is deliverable when enabled and
     holding at least one enabled receiver — email and SMS receivers count only with
-    status Enabled; other receiver types carry no status. Receiver targets omit URL
-    paths and query strings (webhook host only; Logic App / Function resource ids, not
-    callback URLs) and mask phone numbers to the last four digits. A processing rule
-    applies when enabled, its schedule is not known to be inactive, and one of its
-    scopes contains one of the rule's scopes. An applicable RemoveAllActionGroups rule
-    with no conditions and a schedule known to be active (or none) sets suppressed
-    true; one with conditions or an undecidable schedule (recurrences, non-UTC zone
-    near its edges) sets suppressed null. AddActionGroups rules of the first kind add
-    their groups (added_by_processing_rule). routes_to_enabled_receiver: enabled and
-    any deliverable group. reaches_human: routes_to_enabled_receiver and suppressed is
-    false. muteActionsDuration (log) and throttling.duration (smart detector) are
-    reported as mute_actions_duration, not evaluated.
+    status Enabled (Disabled and NotSpecified send nothing); other receiver types carry
+    no status. notifies_people: deliverable through an email, SMS, voice, app push,
+    ARM role or ITSM receiver; webhook, Logic App, Function, runbook and Event Hub
+    receivers hand off to code that may or may not notify anyone. Receiver targets omit
+    URL paths and query strings (webhook host only; Logic App / Function resource ids,
+    not callback URLs) and mask phone numbers to the last four digits. A processing
+    rule matches when enabled, its schedule is not known to be inactive, and its scopes
+    overlap the alert rule's: scope_match "full" when they contain every alert scope,
+    "partial" when they cover only some of what the alert fires on (a narrower scope, or
+    some of several alert scopes). It applies_to_every_fire when full, with no
+    conditions and a schedule known to be active (or none). Such a
+    RemoveAllActionGroups rule sets suppressed true; any other matching one sets
+    suppressed null. AddActionGroups rules add their groups (added_by_processing_rule,
+    applies_to_every_fire as for the rule). Verdicts are true, false or null, and null
+    means unknown, never "no". routes_to_enabled_receiver / routes_to_person: true when
+    a resolved group on every notification is deliverable / notifies people; null when
+    only an unresolved group or a sometimes-added group might; false otherwise (and for
+    a disabled rule). reaches_human: false when the rule is disabled, routes nowhere or
+    is suppressed; true when it routes to a person and is not suppressed; otherwise
+    null. The summary counts null verdicts apart (*_unknown, *_possibly_*);
+    all_enabled_rules_reach_human is null when none is false but some are unknown.
+    muteActionsDuration (log) and throttling.duration (smart detector) are reported as
+    mute_actions_duration, not evaluated.

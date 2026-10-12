@@ -442,8 +442,8 @@ schemas and the `paramify` CLI — not the internal code.
   — resource-level logging across the whole subscription. `azure_diagnostic_settings`
   reads only the subscription's activity log export, and the per-service fetchers
   only their own types, so nothing showed which resources' logs go nowhere. Every
-  resource Resource Graph lists, plus each storage account's blob, file, queue
-  and table services, is checked for the log categories its type emits and the
+  resource Resource Graph lists, plus the blob, file, queue and table services
+  each storage account's kind has, is checked for the log categories its type emits and the
   diagnostic settings that export them: `has_enabled_log_setting`,
   `destination_types`, `sends_to_log_analytics`, `uncaptured_log_categories` and
   `captures_all_audit_categories`. The summary gives log-setting and Log
@@ -451,13 +451,17 @@ schemas and the `paramify` CLI — not the internal code.
   counted by type; metrics-only and unsupported types are outside the
   denominator. A row count that disagrees with Resource Graph's total, or any
   read error other than an unsupported type or a since-deleted resource, fails
-  the run. Reader-only; timeout 1800s.
+  the run. One `ResourceTypeNotSupported` answer covers the rest of that type.
+  Reader-only; about 14 resources a second, timeout 3600s.
 - **`azure_alert_rules`** (`EVD-AZURE-ALERT-RULES`) — every metric alert, log
   search alert and smart detector rule, resolved through its action groups to
   the receivers it notifies and checked against alert processing rules that
-  suppress or add notifications. Per rule: `routes_to_enabled_receiver`,
-  `suppressed` and `reaches_human`; the summary counts the enabled rules that
-  reach a person. Read through raw ARM REST, since `azure-mgmt-monitor` 6.x drops
+  suppress or add notifications. A processing rule scoped narrower than the
+  alert is a partial match. Per rule: `routes_to_enabled_receiver`,
+  `routes_to_person` (email, SMS, voice, app push, ARM role or ITSM; webhooks,
+  Logic Apps, Functions, runbooks and Event Hubs may or may not reach anyone),
+  `suppressed` and `reaches_human`, each true, false or null when unknown. The
+  summary counts unknown verdicts apart rather than as "no". Read through raw ARM REST, since `azure-mgmt-monitor` 6.x drops
   `nextLink` on metric alerts and action groups and reads log alerts in the 2018
   schema. Reader-only.
 
@@ -589,12 +593,14 @@ schemas and the `paramify` CLI — not the internal code.
   disabled, had no enabled receiver, or an alert processing rule removed its
   notifications. Each rule now carries `resolved_action_groups` (enabled state
   and enabled receivers; webhook host only, phone numbers masked),
-  `routes_to_enabled_receiver`, `suppressed` (true / null when undecidable /
-  false) and `reaches_human`, from raw ARM reads of action groups and processing
-  rules. A second map, `change_operation_coverage`, covers App Service create /
-  update, configuration, deployment and slot swap, counting only alerts that
-  reach a person; `monitored_operation_coverage_reaching_human` does the same
-  for the existing map. `action_groups` and `monitored_operation_coverage` are
+  `routes_to_enabled_receiver`, `routes_to_person`, `suppressed` and
+  `reaches_human`, decided as in `azure_alert_rules` (true, false, or null when
+  unknown), from raw ARM reads of action groups and processing rules. A second
+  map, `change_operation_coverage`, covers App Service create / update,
+  configuration, deployment and slot swap, at site and slot level, counting
+  only alerts that reach a person (null where only one that might covers it);
+  `monitored_operation_coverage_reaching_human` does the same for the existing
+  map. `action_groups` and `monitored_operation_coverage` are
   unchanged.
 - **`azure_diagnostic_settings` also maps to `KSI-MLA-OSM`**, which its
   subscription activity-log export already evidenced.

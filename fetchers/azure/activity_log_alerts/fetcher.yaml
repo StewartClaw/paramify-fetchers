@@ -56,14 +56,18 @@ evidence_set:
     nextLink: Microsoft.Insights/actionGroups (api 2023-01-01) and
     Microsoft.AlertsManagement/actionRules — alert processing rules (2021-08-08);
     action groups referenced from another subscription are fetched by id and stay in
-    unresolved_action_group_ids on 403/404. action_groups keeps the rule's own id list;
-    resolved_action_groups adds each group's enabled state and enabled receivers (email
-    and SMS count only with status Enabled; webhook host only, phone numbers masked to
-    the last four digits). routes_to_enabled_receiver: rule enabled and a group enabled
-    with an enabled receiver. suppressed: true when an enabled RemoveAllActionGroups
-    processing rule with no conditions and an active (or no) schedule has a scope
-    containing one of the rule's scopes, null when such a rule has conditions or an
-    undecidable schedule. reaches_human: routes_to_enabled_receiver and suppressed is
-    false. monitored_operation_coverage and its totals are unchanged from 0.1.0 (enabled
-    rules); monitored_operation_coverage_reaching_human and change_operation_coverage
-    (results.change_operations) count only rules that reach a person.
+    unresolved_action_group_ids on 403/404; an id that is not an ARM action group path
+    is never fetched. action_groups keeps the rule's own id list; resolved_action_groups
+    adds each group's enabled state and enabled receivers (email and SMS count only with
+    status Enabled, so Disabled and NotSpecified send nothing; webhook host only, phone
+    numbers masked to the last four digits). Routing is decided as in
+    azure_alert_rules: a processing rule's scope_match is "full" or "partial" (narrower
+    than a subscription-scoped alert, for instance); suppressed is true only for a
+    full-scope, unconditional, active RemoveAllActionGroups rule and null for any other
+    matching one; routes_to_person counts email, SMS, voice, app push, ARM role and
+    ITSM receivers; reaches_human is true, false or null (unknown, never "no").
+    monitored_operation_coverage and its totals are unchanged from 0.1.0 (enabled
+    rules). monitored_operation_coverage_reaching_human and change_operation_coverage
+    (results.change_operations, site and slot operations) are true when an alert that
+    reaches a person covers the operation, null when only one that might, false
+    otherwise; change_operations_possibly_covered counts the nulls.

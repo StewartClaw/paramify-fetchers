@@ -32,6 +32,7 @@ from alert_routing import (  # noqa: E402
     collect_action_groups,
     collect_processing_rules,
     route,
+    tri_state,
 )
 from arm_rest import arm_rest_client, list_all  # noqa: E402
 
@@ -130,10 +131,15 @@ def rule_record(rule_type: str, raw: dict, groups: dict, processing_rules: list[
     return {**rule, **route(rule["enabled"], rule["action_group_ids"], rule["scopes"], groups, processing_rules)}
 
 
+def _count(rules: list[dict], field: str, value) -> int:
+    return sum(1 for r in rules if r[field] is value)
+
+
 def summarize(rules: list[dict], groups: list[dict], processing_rules: list[dict]) -> dict:
+    """Unknown (null) verdicts are counted apart, never folded into "no"."""
     alerting = [r for r in rules if r["is_alerting_rule"]]
     enabled = [r for r in alerting if r["enabled"]]
-    reaching = [r for r in enabled if r["reaches_human"]]
+    reaching = _count(enabled, "reaches_human", True)
     by_type = Counter(r["rule_type"] for r in rules)
     return {
         "total_alert_rules": len(rules),
@@ -142,15 +148,20 @@ def summarize(rules: list[dict], groups: list[dict], processing_rules: list[dict
         "enabled_alerting_rules": len(enabled),
         "disabled_alerting_rules": len(alerting) - len(enabled),
         "enabled_rules_without_action_groups": sum(1 for r in enabled if not r["resolved_action_groups"]),
-        "enabled_rules_routing_to_enabled_receiver": sum(1 for r in enabled if r["routes_to_enabled_receiver"]),
-        "enabled_rules_suppressed": sum(1 for r in enabled if r["suppressed"] is True),
-        "enabled_rules_possibly_suppressed": sum(1 for r in enabled if r["suppressed"] is None),
-        "enabled_rules_reaching_human": len(reaching),
-        "reaching_human_percentage": coverage_percentage(len(reaching), len(enabled)),
-        "all_enabled_rules_reach_human": bool(enabled) and len(reaching) == len(enabled),
+        "enabled_rules_routing_to_enabled_receiver": _count(enabled, "routes_to_enabled_receiver", True),
+        "enabled_rules_routing_unknown": _count(enabled, "routes_to_enabled_receiver", None),
+        "enabled_rules_routing_to_person": _count(enabled, "routes_to_person", True),
+        "enabled_rules_suppressed": _count(enabled, "suppressed", True),
+        "enabled_rules_possibly_suppressed": _count(enabled, "suppressed", None),
+        "enabled_rules_reaching_human": reaching,
+        "enabled_rules_reaching_human_unknown": _count(enabled, "reaches_human", None),
+        "enabled_rules_not_reaching_human": _count(enabled, "reaches_human", False),
+        "reaching_human_percentage": coverage_percentage(reaching, len(enabled)),
+        "all_enabled_rules_reach_human": tri_state(r["reaches_human"] for r in enabled) if enabled else False,
         "log_search_rules_enabled": sum(1 for r in enabled if r["rule_type"] == RULE_LOG_SEARCH),
         "action_groups": len(groups),
         "deliverable_action_groups": sum(1 for g in groups if g["deliverable"]),
+        "action_groups_notifying_people": sum(1 for g in groups if g["notifies_people"]),
         "processing_rules": len(processing_rules),
         "suppressing_processing_rules_active": sum(
             1 for p in processing_rules if p["suppresses_notifications"] and p["active_now"] is not False

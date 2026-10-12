@@ -43,6 +43,7 @@ from alert_routing import (  # noqa: E402
     collect_action_groups,
     collect_processing_rules,
     route,
+    tri_state,
 )
 from arm_rest import arm_rest_client  # noqa: E402
 
@@ -90,9 +91,9 @@ MONITORED_OPERATIONS = {
 
 # App Service deployment and configuration changes, kept out of the CIS map so its totals do not move.
 CHANGE_OPERATIONS = {
-    "create_update_web_app": ("Microsoft.Web/sites/write",),
-    "update_web_app_configuration": ("Microsoft.Web/sites/config/write",),
-    "deploy_web_app": ("Microsoft.Web/sites/deployments/write",),
+    "create_update_web_app": ("Microsoft.Web/sites/write", "Microsoft.Web/sites/slots/write"),
+    "update_web_app_configuration": ("Microsoft.Web/sites/config/write", "Microsoft.Web/sites/slots/config/write"),
+    "deploy_web_app": ("Microsoft.Web/sites/deployments/write", "Microsoft.Web/sites/slots/deployments/write"),
     "swap_web_app_slots": (
         "Microsoft.Web/sites/slotsswap/action",
         "Microsoft.Web/sites/slots/slotsswap/action",
@@ -274,22 +275,31 @@ def summarize(alerts: list[dict]) -> dict:
     }
 
 
+def coverage_reaching_human(alerts: list[dict], operations_map: dict) -> dict:
+    """Per operation: True if an alert that reaches a person covers it, None if only one that might, else False."""
+    sure = operation_coverage([a for a in alerts if a.get("reaches_human") is True], operations_map)
+    maybe = operation_coverage([a for a in alerts if a.get("enabled") and a.get("reaches_human") is None], operations_map)
+    return {key: True if sure[key] else None if maybe[key] else False for key in operations_map}
+
+
 def routing_summary(alerts: list[dict]) -> dict:
     """Coverage again, counting only alerts that reach a person, plus the App Service change map."""
-    reaching = [a for a in alerts if a.get("reaches_human")]
-    change = operation_coverage(reaching, CHANGE_OPERATIONS)
-    covered = sum(1 for is_covered in change.values() if is_covered)
+    enabled = [a for a in alerts if a.get("enabled")]
+    change = coverage_reaching_human(alerts, CHANGE_OPERATIONS)
     return {
-        "alerts_routing_to_enabled_receiver": sum(1 for a in alerts if a.get("routes_to_enabled_receiver")),
-        "alerts_suppressed": sum(1 for a in alerts if a.get("suppressed") is True),
-        "alerts_possibly_suppressed": sum(1 for a in alerts if a.get("enabled") and a.get("suppressed") is None),
-        "alerts_reaching_human": len(reaching),
-        "monitored_operation_coverage_reaching_human": operation_coverage(reaching),
+        "alerts_routing_to_enabled_receiver": sum(1 for a in enabled if a.get("routes_to_enabled_receiver") is True),
+        "alerts_routing_unknown": sum(1 for a in enabled if a.get("routes_to_enabled_receiver") is None),
+        "alerts_suppressed": sum(1 for a in enabled if a.get("suppressed") is True),
+        "alerts_possibly_suppressed": sum(1 for a in enabled if a.get("suppressed") is None),
+        "alerts_reaching_human": sum(1 for a in enabled if a.get("reaches_human") is True),
+        "alerts_reaching_human_unknown": sum(1 for a in enabled if a.get("reaches_human") is None),
+        "monitored_operation_coverage_reaching_human": coverage_reaching_human(alerts, MONITORED_OPERATIONS),
         "change_operation_coverage": change,
-        "change_operations_covered": covered,
+        "change_operations_covered": sum(1 for v in change.values() if v is True),
+        "change_operations_possibly_covered": sum(1 for v in change.values() if v is None),
         "change_operations_total": len(CHANGE_OPERATIONS),
-        "all_change_operations_covered": covered == len(CHANGE_OPERATIONS),
-        "uncovered_change_operations": sorted(k for k, is_covered in change.items() if not is_covered),
+        "all_change_operations_covered": tri_state(change.values()),
+        "uncovered_change_operations": sorted(k for k, v in change.items() if v is False),
     }
 
 
