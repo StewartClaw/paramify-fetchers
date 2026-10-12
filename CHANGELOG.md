@@ -58,7 +58,7 @@ schemas and the `paramify` CLI — not the internal code.
   verdict in `metadata.inventory`, and the uploader does not send one that is
   incomplete: a failed run, a contract break, withheld records, or no records
   at all. The TUI lists inventories in their own section. Start from
-  `fetchers/_template_inventory/`; see `docs/inventory_fetchers.md`.
+  `fetchers/_template_inventory/`; see `docs/inventory_fetchers_guide.md`.
 
 - **Four Azure fetchers for the network edge and cache tier**, read-only on
   the built-in Reader role. `azure_managed_redis_configuration` reports each
@@ -87,6 +87,41 @@ schemas and the `paramify` CLI — not the internal code.
   fetchers keep an allow-list of fields, because Azure returns site-link
   pre-shared keys in plain text to Reader; no key reaches the evidence.
   Verified against a live subscription.
+
+- **Evidence samples: one record per fetcher, captured once.** A fetcher can
+  now carry a `sample.json` beside its `fetcher.yaml` that shows what it
+  collects without anyone running it. Where the payload repeats a record (one
+  entry per instance, user or subnet), the sample keeps the most filled-in
+  one, with how many were seen and how often each field was filled in. New
+  commands: `paramify samples status`, `paramify samples show <fetcher>` and
+  `paramify samples backfill`, which builds samples from past runs under
+  `./evidence`. Backfill replaces emails, person names, logins, account ids,
+  UUIDs, long hex ids, IP addresses and target values with stable fakes of the
+  same shape, and does not write a sample in which any identifier from any
+  scanned file survives. Free text is not rewritten, so a backfilled sample
+  starts `"reviewed": false` and needs a person to read it before it is
+  committed. See
+  [`docs/evidence_samples.md`](docs/evidence_samples.md).
+
+- **Discovery fetchers (`kind: discovery`)**, a fourth collection kind that
+  lists what a platform's credentials can see instead of collecting evidence.
+  The runner writes their output to `<run>/discovery/`, which neither uploader
+  reads. Every platform writes the same JSON document
+  (`framework/schemas/discovery_schema.json`). Each resource type says whether
+  it could be read (`ok`, `denied`, `not_enabled`, `error`, or `truncated` with
+  a lower-bound count), so a type that could not be read never looks like one
+  with nothing in it. Records about people are counted, never listed. The
+  shared engine in `fetchers/_lib/discovery.py` handles paging, retries and the
+  document, so a platform's fetcher is a table of resources plus its paging. The
+  first is `knowbe4_discovery_beta`: account, groups, training campaigns, modules,
+  policies, phishing campaigns and tests, and user and enrollment counts. It
+  pages by cursor, since KnowBe4 retires the `page` parameter in November 2026.
+  The second is `aws_discovery_beta`: about 75 resource types, at least one for every
+  AWS service an AWS fetcher reads (a test keeps that true), listed in every
+  enabled region through the aws CLI, plus a count per resource type from AWS
+  Resource Explorer wherever it has an index, with each (type, region) pair carrying
+  its own status so a region denied by a service control policy never reads as
+  empty. One document per target account. See `docs/discovery.md`.
 - **A Wiz category with twelve fetchers**, for Wiz commercial and Wiz for
   Government, sharing one GraphQL client and one service account. Eleven are
   evidence fetchers: `wiz_scan_coverage`, `wiz_posture_issues`,
@@ -150,7 +185,7 @@ schemas and the `paramify` CLI — not the internal code.
   `metadata.evidence_set`, and both uploaders send it when they create a set.
   Sets that already exist keep the frequency they have. The uploader config can
   override it per fetcher, like `name` and `instructions`.
-- **`docs/pipelines.md`: sending scan reports from the TUI**, step by step
+- **`docs/pipelines_guide.md`: sending scan reports from the TUI**, step by step
   with three recordings. It covers a manifest for the scanners, pointing each
   fetcher at an assessment and choosing its close policy, running and sending
   from the Paramify tab, and jobs and manual closes. It explains how cycles
@@ -294,7 +329,7 @@ schemas and the `paramify` CLI — not the internal code.
   uploads unchanneled exactly as before. A set with more than one channel errors
   that file rather than guessing, until the rules for choosing exist. The channel
   is recorded per file in `upload_log.json`, since the API does not report it back
-  on an artifact. See [`docs/uploader_design.md`](docs/uploader_design.md).
+  on an artifact. See [`docs/uploader_guide.md`](docs/uploader_guide.md).
 - **A default uploader config at `./upload.yaml`.** Every upload stage falls back
   to it when no `--config` is given, which is how the TUI — which passes no path —
   reaches base_url and the per-fetcher overrides at all. Both front-ends now name
@@ -306,7 +341,7 @@ schemas and the `paramify` CLI — not the internal code.
   `evidence_sets` list of `reference_id`s, so a validator that applies to four
   fetchers is one file naming four sets rather than four copies drifting apart.
   A fetcher's validators are the reverse lookup on its `evidence_set.reference_id`.
-  See [`docs/validators_design.md`](docs/validators_design.md).
+  See [`docs/validators_guide.md`](docs/validators_guide.md).
 - **Validator sync** — `paramify validators sync` and `paramify upload
   --with-validators` (engine in `uploaders/paramify_validators/`). Pushes registry
   validators to Paramify (`POST /validators`) and CONNECTs each to its evidence
@@ -591,6 +626,19 @@ schemas and the `paramify` CLI — not the internal code.
 
 ### Fixed
 
+- **Every uploader reads "already exists" / "already connected" the same way.**
+  The API refuses a repeat evidence-set create or a repeat CONNECT instead of
+  ignoring it, and each uploader held its own test for that refusal: the scripts
+  uploader treated a repeat CONNECT as success, the validator syncer failed on
+  it, and the evidence-set fallbacks recognised the refusal only as an HTTP 400.
+  API spec 0.9.2 permits the same refusal as a 409 Conflict on every operation,
+  which the 400-only tests would have missed. One shared rule
+  (`framework/paramify_responses.py`) now accepts 400 or 409 when the message
+  names the duplicate, and nothing else, so re-running any stage stays
+  idempotent on either code. The validator syncer also resolves its token like
+  the other uploaders (`PARAMIFY_UPLOAD_API_TOKEN`, falling back to
+  `PARAMIFY_API_TOKEN`) and reports a failed evidence-set lookup as its own
+  error rather than a bare HTTP exception.
 - **`aws_security_groups` shows all-traffic and IPv6 rules** (0.2.0 → 0.3.0).
   A rule with no port range — protocol `-1`, "All traffic" — was dropped from
   the evidence, so an inbound all-traffic rule from `0.0.0.0/0` and every
@@ -760,7 +808,7 @@ schemas and the `paramify` CLI — not the internal code.
   (`paramify assessments list` / `select`), the same way `paramify programs
   target` picks a program UUID without anyone typing one. Start from
   [`fetchers/_template_issue_report/`](fetchers/_template_issue_report/) and
-  [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md). Written
+  [`docs/issue_report_fetchers.md`](https://github.com/paramify/paramify-fetchers/blob/v0.5.0-beta/docs/issue_report_fetchers.md). Written
   against Paramify REST API v0 spec 0.6.0
   ([API documentation](https://app.paramify.com/api/documentation/)).
 
@@ -803,7 +851,7 @@ schemas and the `paramify` CLI — not the internal code.
   [`fetchers/_lib/status.sh`](fetchers/_lib/status.sh) and
   [`fetchers/_lib/fetcher_status.py`](fetchers/_lib/fetcher_status.py), both
   named `report_failure` — and
-  [`docs/fetcher_contract.md`](docs/fetcher_contract.md) mandates it. It logs
+  [`docs/fetcher_contract.md`](https://github.com/paramify/paramify-fetchers/blob/v0.5.0-beta/docs/fetcher_contract.md) mandates it. It logs
   *and* reports, so it is the whole failure path; logging inside the helper is
   what guarantees the reason is the last line on stderr, which is what the
   fallback reads. The same nine-line status write previously existed as **27
@@ -1308,7 +1356,7 @@ schemas and the `paramify` CLI — not the internal code.
   `--reassociate` / `--json`. Backed by the `uploaders/paramify_scripts/` uploader.
   Only `SCRIPT` associations are automated; control / solution-capability / validator
   linkage stays Paramify-side.
-- [`docs/uploader_design.md`](docs/uploader_design.md) — a dedicated uploader design
+- [`docs/uploader_design.md`](https://github.com/paramify/paramify-fetchers/blob/v0.3.0-beta/docs/uploader_design.md) — a dedicated uploader design
   doc covering both built uploaders and the shared evidence-set identity model, and
   a README section + docs-table entries pointing to it.
 
@@ -1383,7 +1431,7 @@ change before 1.0 (see [`docs/versioning.md`](https://github.com/paramify/parami
   evidence payload).
 - Versioning & contract policy ([`docs/versioning.md`](https://github.com/paramify/paramify-fetchers/blob/v0.2.0-beta/docs/versioning.md)), this
   changelog, and the manual release runbook
-  ([`docs/releasing.md`](docs/releasing.md)).
+  ([`docs/releasing.md`](https://github.com/paramify/paramify-fetchers/blob/v0.2.0-beta/docs/releasing.md)).
 
 ### Changed
 
