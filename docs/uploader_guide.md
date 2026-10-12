@@ -36,8 +36,7 @@ paramify doctor
 
 `--dry-run` reads the newest run and lists each file with the evidence set it
 will land on. It makes no API calls. Check the destination on the first line
-and each `set=` ([how sets are matched](uploader_design.md#the-evidence-set-identity-model-shared)).
-To upload an older run, pass its directory.
+and each `set=`. To upload an older run, pass its directory.
 
 ![paramify upload --dry-run: production destination, two SQS files from one run, both going to set EVD-SQS-ENC](img/uploader/02-dry-run.png)
 
@@ -67,7 +66,7 @@ overrides:
 ## 4. Upload
 
 Run it without `--dry-run`. Each file shows `OK`, plus `channel=` when its set
-has a channel ([channels](uploader_design.md#channels)).
+has a channel.
 
 ![paramify upload: both SQS files OK on set EVD-SQS-ENC, then Done: uploaded=2 and the path to upload_log.json](img/uploader/04-upload.png)
 
@@ -144,8 +143,4 @@ results, see [verify validators](suggest_validator_guide.md#5-verify-in-paramify
 | `No fetchers in the manifest …` from `scripts sync` | It found none in `manifest.yaml` at the repo root. Name your manifest, or pass `--all`. |
 | The run also collected scan reports | `paramify upload` sends evidence only. Send reports with the [issues uploader](../uploaders/paramify_issues/README.md). |
 
-**More detail:** [why upload is its own stage](uploader_design.md#why-uploading-is-its-own-stage) ·
-[the identity model](uploader_design.md#the-evidence-set-identity-model-shared) ·
-[how scripts sync decides](uploader_design.md#action-per-fetcher) ·
-[when to run which](uploader_design.md#when-to-run-which) ·
-[upload options](../uploaders/paramify_evidence/README.md#config---config-optional)
+**More detail:** [upload options](../uploaders/paramify_evidence/README.md#config---config-optional)
