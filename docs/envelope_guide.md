@@ -2,9 +2,8 @@
 
 The runner wraps every evidence file in an envelope. `metadata` records which
 fetcher ran, when, against what, and whether it worked. `payload` is the
-fetcher's own output, untouched ([why](envelope_design.md#why)). Here you run a
-credential-free demo fetcher, read its envelope, spot a failed one, and find
-the same file in Paramify.
+fetcher's own output, untouched. Here you run a credential-free demo fetcher,
+read its envelope, spot a failed one, and find the same file in Paramify.
 
 ![Flow: paramify run writes raw JSON and the runner wraps it; paramify runs and paramify evidence read the envelope's keys; paramify upload sends it, and the artifact's JSON in Paramify is the same envelope](img/envelope/flow.svg)
 
@@ -39,7 +38,7 @@ paramify evidence evidence/run-*/demo_hello.json
 ```
 </details>
 
-The keys worth checking ([every field](envelope_design.md#field-reference-metadata)):
+The keys worth checking:
 
 | Key | Tells you |
 |---|---|
@@ -52,8 +51,8 @@ The keys worth checking ([every field](envelope_design.md#field-reference-metada
 
 `paramify runs` flags a run with failures, but `paramify run` only prints
 `FAIL`, so open the file. It's still enveloped, with `status: failed`, the
-reason in `error`, and often an `error_code`, which the field reference doesn't
-list yet. Here, a status-page fetcher's URL lacks `https://`.
+reason in `error`, and often an `error_code`. Here, a status-page fetcher's URL
+lacks `https://`.
 
 ![paramify runs shows one run ok and an older one with failures; paramify evidence on the failed file shows its target, status failed, exit_code 1, error, and error_code bad_config](img/envelope/03-failed.png)
 
@@ -97,11 +96,9 @@ envelope from step 2, because that's what the uploader sends by default
 |---|---|
 | A fetcher shows `FAIL` but wrote no file | It failed before writing, so there's no envelope. Read its `stderr_tail` in the run's `_run_metadata.json`. |
 | A failed file was uploaded | That's the default, and the artifact's note records `status=failed`. To skip them, set `skip_failed: true` in the [upload config](../uploaders/paramify_evidence/README.md#config---config-optional). |
-| Upload says `missing/incomplete evidence_set` | The fetcher's `fetcher.yaml` has no `evidence_set` block. [Add one](authoring_a_fetcher.md#fetcheryaml). |
+| Upload says `missing/incomplete evidence_set` | The fetcher's `fetcher.yaml` has no `evidence_set` block. Add one ([`fetcher.yaml` setup](authoring_fetcher_guide.md#2-fill-in-fetcheryaml)). |
 | Upload says `not envelope-wrapped`, or the file shows `enveloped: False` | The file predates the envelope or wasn't written by the runner. Collect it again. |
 | `Got unexpected extra argument(s)` on a `run-*` path | The glob matched more than one run. Name the run directory. |
 
-**More detail:** [why the runner wraps it](envelope_design.md#where-its-applied-the-runner-wraps-it) ·
-[edge cases and secrets in `error`](envelope_design.md#edge-cases) ·
-[the schema](../framework/schemas/envelope_schema.json) ·
+**More detail:** [the schema](../framework/schemas/envelope_schema.json) ·
 [how evidence maps to Paramify](../uploaders/paramify_evidence/README.md#how-evidence-maps-to-paramify)
