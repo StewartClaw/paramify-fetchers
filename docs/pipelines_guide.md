@@ -19,8 +19,7 @@ also has the **Pipelines** and **Pipeline Jobs** permissions
 
 ## 1. Give scan fetchers their own manifest
 
-Scans run on their own schedule, so keep them apart from your evidence manifest
-([why](pipelines.md#1-give-scan-fetchers-their-own-manifest)).
+Scans run on their own schedule, so keep them apart from your evidence manifest.
 
 ![paramify manifest init, then manifest add: the new entry still needs the Wiz endpoint, credentials, an assessment_id and a close_cycle](img/pipelines/01-manifest.png)
 
@@ -32,7 +31,7 @@ paramify manifest add -f manifests/pipelines.yaml wiz_vulnerability_findings
 ```
 </details>
 
-Wire the scanner settings it lists ([Wiz settings](wiz_pipeline_fetchers.md#configuration)),
+Wire the scanner settings it lists ([Wiz manifest settings](wiz_pipeline_guide.md#2-build-the-manifest)),
 or [let your AI agent](../README.md#drive-it-with-an-ai-agent) do it with
 `wire-manifest`. Step 2 covers the assessment lines.
 [In the TUI](https://support.paramify.com/hc/en-us/articles/55867428958355-Setup-Fetchers),
@@ -42,8 +41,7 @@ that's `n`, then `a` on the **Manifest** tab.
 
 `paramify assessments select` lists assessments of the type the fetcher feeds,
 then asks how the cycle closes. **Closing a cycle auto-closes every open issue the
-cycle never saw**, so choose with care
-([details](pipelines.md#2-point-each-fetcher-at-an-assessment)):
+cycle never saw**, so choose with care:
 
 - `after_run`: one report per cycle, such as a monthly scan. The upload closes
   the cycle when every target in the run succeeded.
@@ -78,7 +76,7 @@ run:
 ## 3. Run it
 
 Check the manifest, then collect. The report lands in the run's
-`issue-reports/` folder, untouched ([why](issue_report_fetchers.md#the-one-rule)).
+`issue-reports/` folder, untouched ([streaming the tool's bytes](issue_report_fetchers_guide.md#3-stream-the-tools-bytes)).
 
 ![paramify validate reports the manifest valid, then paramify run collects one issue report](img/pipelines/03-run.png)
 
@@ -146,11 +144,9 @@ The scan file is on it, and its findings are now issues, also under
 | HTTP 400 on upload | Usually the assessment has no file intake preset. Set it up in Paramify, then send again. |
 | HTTP 401 or 403 | The key lacks a pipeline permission. |
 | HTTP 404 | The assessment is in another workspace, or was deleted. Do step 2 again. |
-| `[WARN] N newer cycle(s) exist` | An older cycle is still open, and uploads land on the oldest ([why](pipelines.md#how-cycles-work)). Close the old cycles. |
+| `[WARN] N newer cycle(s) exist` | An older cycle is still open, and uploads land on the oldest. Close the old cycles. |
 | Job `FAILED`, or `blocked by failed job` | Fix the cause (often the preset's column mapping), then `paramify issues jobs --retry <job>` or `--cancel <job>`. |
 | `close skipped: …` | The run was incomplete. Send the missing report, then close by hand. |
 
-**More detail:** [how cycles work](pipelines.md#how-cycles-work) ·
-[every error](pipelines.md#when-something-goes-wrong) ·
-[uploader reference](../uploaders/paramify_issues/README.md) ·
-[writing a scan fetcher](issue_report_fetchers.md)
+**More detail:** [uploader reference](../uploaders/paramify_issues/README.md) ·
+[writing a scan fetcher](issue_report_fetchers_guide.md)
