@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/) applied
-to the contract (see [`docs/versioning.md`](docs/versioning.md)). "The contract"
+to the contract (see [`docs/versioning_guide.md`](docs/versioning_guide.md)). "The contract"
 is the public API surface — the `fetcher.yaml` / category / manifest / envelope
 schemas and the `paramify` CLI — not the internal code.
 
@@ -971,7 +971,7 @@ schemas and the `paramify` CLI — not the internal code.
   percentage is now taken over the keys actually read, with
   `readable_keys` / `unreadable_keys` added to the summary beside `total_keys`.
   A validator keying on the old shape should be checked. This is payload, not
-  contract, so no bump ([`docs/versioning.md`](docs/versioning.md)).
+  contract, so no bump ([`docs/versioning.md`](https://github.com/paramify/paramify-fetchers/blob/v0.5.0-beta/docs/versioning.md)).
 
   Collection still fails where the evidence would be empty or wrong: the caller
   identity, `kms list-keys`, or **every** key being unreadable — that last guard
@@ -1401,7 +1401,7 @@ schemas and the `paramify` CLI — not the internal code.
 ## [0.2.0-beta] - 2026-07-10
 
 First public release — a beta / pre-release. Pre-1.0, so the contract may still
-change before 1.0 (see [`docs/versioning.md`](docs/versioning.md)).
+change before 1.0 (see [`docs/versioning.md`](https://github.com/paramify/paramify-fetchers/blob/v0.2.0-beta/docs/versioning.md)).
 
 ### Added
 
@@ -1429,7 +1429,7 @@ change before 1.0 (see [`docs/versioning.md`](docs/versioning.md)).
   `api.ksi_coverage()`.
 - Optional `validators` metadata on `fetcher.yaml` (regex checks over the
   evidence payload).
-- Versioning & contract policy ([`docs/versioning.md`](docs/versioning.md)), this
+- Versioning & contract policy ([`docs/versioning.md`](https://github.com/paramify/paramify-fetchers/blob/v0.2.0-beta/docs/versioning.md)), this
   changelog, and the manual release runbook
   ([`docs/releasing.md`](https://github.com/paramify/paramify-fetchers/blob/v0.2.0-beta/docs/releasing.md)).
 
