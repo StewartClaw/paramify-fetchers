@@ -6,13 +6,13 @@ Paramify parses it into issues
 ([how intake works](https://support.paramify.com/hc/en-us/articles/41294208918291-Manage-Vulnerability-and-Configuration-Scans)).
 This guide builds one from the template, runs it against two scans, and reads what
 lands in the run directory. If you're asserting a configuration state instead,
-write an evidence fetcher ([which kind](issue_report_fetchers.md#issue-report-fetchers)).
+write an [evidence fetcher](authoring_fetcher_guide.md).
 
 ![Flow: copy the template and declare it, collect with paramify run, then pick an assessment and send the reports](img/issue_report_fetchers/flow.svg)
 
 **You need:** [the repo installed](../README.md#install) ·
 an API credential that can export the tool's reports ·
-for the last step, [an assessment with a file intake preset](pipelines.md#before-you-start)
+for the last step, an assessment with a file intake preset ([scan upload guide](pipelines_guide.md))
 
 ---
 
@@ -20,10 +20,8 @@ for the last step, [an assessment with a file intake preset](pipelines.md#before
 
 The running example is `tenable_vuln_scan`, a Tenable scan export. It isn't in
 the repo, and the pictures run it against a local stand-in for Tenable's API with
-synthetic scans. Copy the issue-report template, not the evidence one
-([what differs](issue_report_fetchers.md#writing-one)). For a new category, also
-add an empty `fetchers/_categories/tenable.yaml`
-([per-category setup](authoring_a_fetcher.md#per-category-setup-first-fetcher-in-a-new-category)).
+synthetic scans. Copy the issue-report template, not the evidence one. For a
+new category, also add an empty `fetchers/_categories/tenable.yaml`.
 
 ![The template copied to fetchers/tenable/vuln_scan: README.md, fetcher.py, fetcher.yaml, tests](img/issue_report_fetchers/01-copy.png)
 
@@ -41,8 +39,7 @@ to this template ([agent skills](../README.md#drive-it-with-an-ai-agent)).
 
 ## 2. Declare it in `fetcher.yaml`
 
-Replace the placeholders. Three entries make it an issue report
-([why](issue_report_fetchers.md#writing-one)):
+Replace the placeholders. Three entries make it an issue report:
 
 - `kind: issue_report`.
 - `output.type` is the format the tool emits: `csv`, `json`, `xml`, or `nessus`.
@@ -104,9 +101,8 @@ paramify describe tenable_vuln_scan
 
 ## 3. Stream the tool's bytes
 
-**The file on disk must be the tool's own bytes**
-([why](issue_report_fetchers.md#the-one-rule)). Swap the template's request for
-the tool's export call, poll until the export is ready, then stream it to disk.
+**The file on disk must be the tool's own bytes.** Swap the template's request
+for the tool's export call, poll until the export is ready, then stream it to disk.
 Never parse and rewrite it: no `json.dump`, no `csv.writer`.
 
 ```python
@@ -124,10 +120,9 @@ with output_path.open("wb") as fh:
 ```
 
 **One filename per invocation.** Every target writes into the same directory, so
-the name must carry the target or each target overwrites the last
-([why](issue_report_fetchers.md#one-filename-per-invocation)). Keep the template's
-empty-file check: Paramify reads an empty report as "no findings" and resolves
-every open issue.
+the name must carry the target or each target overwrites the last. Keep the
+template's empty-file check: Paramify reads an empty report as "no findings" and
+resolves every open issue.
 
 ## 4. Run it
 
@@ -165,9 +160,8 @@ means two targets wrote the same filename.
 ## 5. Check the report and its index
 
 Each report sits beside `_issue_reports.json`, the sidecar index the uploader reads
-instead of the files ([sidecar fields](issue_report_fetchers.md#the-sidecar-index)).
-`paramify evidence` shows one report's record. Then check the one rule: the file
-should match the same scan exported from the tool's UI.
+instead of the files. `paramify evidence` shows one report's record. Then check
+the bytes: the file should match the same scan exported from the tool's UI.
 
 ![The issue-reports directory holding _issue_reports.json and one .nessus file per scan, the sidecar record for scan 101 with its target, size, and sha256, and cmp reporting the file identical to the UI export](img/issue_report_fetchers/05-report.png)
 
@@ -194,9 +188,9 @@ paramify issues upload --dry-run
 ```
 </details>
 
-Next, [pick the assessment and close policy](pipelines.md#2-point-each-fetcher-at-an-assessment),
-then [send the reports](pipelines.md#3-run-it-then-send-the-reports). Options and
-errors are in the [uploader reference](../uploaders/paramify_issues/README.md).
+Next, follow the scan upload guide: [point it at an assessment](pipelines_guide.md#2-point-it-at-an-assessment),
+then [run and send](pipelines_guide.md#3-run-it). Options and errors are in the
+[uploader reference](../uploaders/paramify_issues/README.md).
 
 ---
 
@@ -209,8 +203,4 @@ errors are in the [uploader reference](../uploaders/paramify_issues/README.md).
 | `paramify upload` says `No run under ./evidence that collected evidence` | It sends evidence only. Use `paramify issues upload`. |
 | The upload summary shows `skipped_failed` | That collection failed, and a partial scan would resolve real issues, so it isn't sent. Fix the fetch and run again ([`skip_failed`](../uploaders/paramify_issues/README.md#configuration)). |
 
-**More detail:** [evidence or issue report](issue_report_fetchers.md#issue-report-fetchers) ·
-[what a run looks like](issue_report_fetchers.md#what-a-run-looks-like) ·
-[choosing an assessment](issue_report_fetchers.md#pointing-it-at-an-assessment) ·
-[where it lives in the code](issue_report_fetchers.md#where-this-lives-in-the-code) ·
-[a shipped fanout example](../fetchers/wiz/stig_compliance_report/)
+**More detail:** [a shipped fanout example](../fetchers/wiz/stig_compliance_report/)
