@@ -1,11 +1,11 @@
 # Writing a validator by hand
 
 A validator is a regex plus rules that Paramify runs against every artifact
-uploaded to an evidence set ([what a validator is](validators_design.md#what-a-validator-is)).
-This guide writes one by hand in the `validators/` registry, proves it can
-fail, publishes it, and checks its verdict in Paramify. The running example is
-`aws_kms_key_rotation`. To have your AI agent write and prove validators for
-you, use [`/suggest-validator`](suggest_validator_guide.md) instead.
+uploaded to an evidence set. This guide writes one by hand in the `validators/`
+registry, proves it can fail, publishes it, and checks its verdict in Paramify.
+The running example is `aws_kms_key_rotation`. To have your AI agent write and
+prove validators for you, use [`/suggest-validator`](suggest_validator_guide.md)
+instead.
 
 ![Flow: find the set and the value in a real run, write the validator and its cases in validators/, check until green, then upload, sync, and verify in Paramify](img/validators/flow.svg)
 
@@ -19,8 +19,8 @@ Node.js (Paramify runs validator regexes as JavaScript, and so does `check`) ·
 ## 1. Find the set and the value
 
 A validator names the evidence sets it applies to by `reference_id`
-([set identity](uploader_design.md#the-evidence-set-identity-model-shared)). Then find the keys in
-your newest run that prove the claim. Here the claim is "every key we can read
+([how upload picks a set](uploader_guide.md)). Then find the keys in your
+newest run that prove the claim. Here the claim is "every key we can read
 rotates", so the regex reads `readable_keys` and `rotated_keys`:
 
 ![paramify describe prints EVD-KMS-ROT; jq on the run's evidence file shows the summary with readable_keys 3 and rotated_keys 2](img/validators/01-evidence.png)
@@ -38,8 +38,7 @@ jq .payload.results.summary evidence/<run>/aws_kms_key_rotation_<target>.json
 Copy [the template](../validators/_template/validator.yaml) to
 `validators/aws/kms_keys_all_rotated.yaml`. The `key` must match the filename,
 and the `name` must be unique in your workspace. Write the regex as JavaScript,
-with named groups ([regex rules](validators_design.md#writing-the-regex-flavor-named-groups-and-the-error-state)).
-A first draft states the claim in one rule:
+with named groups. A first draft states the claim in one rule:
 
 ```yaml
 key: kms_keys_all_rotated
@@ -86,8 +85,8 @@ cases:
 ## 4. Prove it can fail
 
 `check` runs the cases with the semantics Paramify uses, in JavaScript. The
-draft fails it: with the keys renamed, its rule compares nothing to
-nothing and passes ([why](validators_design.md#3-guard-the-read-and-put-collection-health-in-its-own-validator)).
+draft fails it: with the keys renamed, its rule compares nothing to nothing
+and passes.
 
 ![validators check: all_rotated PASS and one_not_rotated FAIL as expected, but summary_keys_renamed PASSED VACUOUSLY, so the check reports 1 failed](img/validators/02-check-fail.png)
 
@@ -138,7 +137,7 @@ git diff validators/common/
 ```
 </details>
 
-Commit all three in your [private copy](private_mirror_workflow.md) of the repo.
+Commit all three in your [private copy](private_mirror_guide.md) of the repo.
 
 ## 6. Publish to Paramify
 
@@ -195,11 +194,7 @@ explains the rules and results views.
 | `check` stops with `must equal the filename` or `schema validation failed` | Make `key` match the filename, and fix the field the error names ([schema](../framework/schemas/validator_schema.json)). |
 | `check` prints `SKIP … names nothing in the registry` | The case file's `validator:` doesn't match any registry `key`. Check the spelling. |
 | `check --select` lists other validators under "no cases" | It counts only the files the filter picked. Run `paramify validators check` with no filter for the real list. |
-| A rule's `disposition` has no effect | The API discards it, so every rule must hold for a pass ([why](validators_design.md#consequence-for-the-rule-shape)). |
+| A rule's `disposition` has no effect | The API discards it, so every rule must hold for a pass. |
 | HTTP 400, `set_not_found`, or app verdicts that differ from the YAML | See [the agent guide's troubleshooting](suggest_validator_guide.md#troubleshooting). |
 
-**More detail:** [the registry model](validators_design.md#the-model-a-deduplicated-registry-linked-on-the-validator) ·
-[validator roles](validators_design.md#cardinality-recap-of-the-confirmed-evidence-model) ·
-[templates, never clobbered](validators_design.md#these-are-templates--create-or-skip-never-clobber) ·
-[the API calls sync makes](validators_design.md#uploading--associating-paramify-rest-api-v080) ·
-[registry README](../validators/README.md)
+**More detail:** [registry README](../validators/README.md)
