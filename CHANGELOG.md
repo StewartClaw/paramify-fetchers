@@ -87,6 +87,21 @@ schemas and the `paramify` CLI — not the internal code.
   fetchers keep an allow-list of fields, because Azure returns site-link
   pre-shared keys in plain text to Reader; no key reaches the evidence.
   Verified against a live subscription.
+
+- **Evidence samples: one record per fetcher, captured once.** A fetcher can
+  now carry a `sample.json` beside its `fetcher.yaml` that shows what it
+  collects without anyone running it. Where the payload repeats a record (one
+  entry per instance, user or subnet), the sample keeps the most filled-in
+  one, with how many were seen and how often each field was filled in. New
+  commands: `paramify samples status`, `paramify samples show <fetcher>` and
+  `paramify samples backfill`, which builds samples from past runs under
+  `./evidence`. Backfill replaces emails, person names, logins, account ids,
+  UUIDs, long hex ids, IP addresses and target values with stable fakes of the
+  same shape, and does not write a sample in which any identifier from any
+  scanned file survives. Free text is not rewritten, so a backfilled sample
+  starts `"reviewed": false` and needs a person to read it before it is
+  committed. See
+  [`docs/evidence_samples.md`](docs/evidence_samples.md).
 - **A Wiz category with twelve fetchers**, for Wiz commercial and Wiz for
   Government, sharing one GraphQL client and one service account. Eleven are
   evidence fetchers: `wiz_scan_coverage`, `wiz_posture_issues`,
