@@ -27,6 +27,9 @@ from azure_common import (  # noqa: E402
 
 logger = logging.getLogger("azure_app_gateway_waf")
 
+# Reading a referenced policy can be refused or 404 without the collection being broken.
+UNREADABLE_STATUS = {401: "not_authorized", 403: "not_authorized", 404: "not_found"}
+
 
 def subscription_from_id(resource_id: str | None) -> str | None:
     parts = str(resource_id or "").split("/")
@@ -78,6 +81,8 @@ def policy_record(policy) -> dict:
         "resource_group": resource_group_from_id(resource_id),
         "location": model_attr(policy, "location"),
         "resolved": True,
+        "read_status": "read",
+        "read_error": None,
         "state": model_attr(settings, "state"),
         "mode": model_attr(settings, "mode"),
         "request_body_check": model_attr(settings, "request_body_check"),
@@ -95,9 +100,9 @@ def policy_record(policy) -> dict:
     }
 
 
-def unresolved_policy(policy_id: str) -> dict:
+def unresolved_policy(policy_id: str, read_status: str | None = None, read_error: str | None = None) -> dict:
     return {"id": policy_id, "name": basename(policy_id), "resource_group": resource_group_from_id(policy_id),
-            "resolved": False, "state": None, "mode": None}
+            "resolved": False, "read_status": read_status, "read_error": read_error, "state": None, "mode": None}
 
 
 def legacy_waf(gateway) -> dict | None:
@@ -107,7 +112,7 @@ def legacy_waf(gateway) -> dict | None:
     enabled = model_attr(config, "enabled")
     return {
         "enabled": enabled,
-        "state": "Enabled" if enabled else "Disabled",
+        "state": None if enabled is None else ("Enabled" if enabled else "Disabled"),
         "mode": model_attr(config, "firewall_mode"),
         "rule_set_type": model_attr(config, "rule_set_type"),
         "rule_set_version": model_attr(config, "rule_set_version"),
@@ -217,18 +222,23 @@ def collect_policies(subscription_id, cred, collector: Collector) -> list:
     )
 
 
-def fetch_policy(policy_id: str, cred, collector: Collector):
-    """GET a referenced WAF policy that list_all did not return (another subscription or resource group)."""
-
-    def _get():
+def fetch_policy(policy_id: str, cred, collector: Collector) -> tuple:
+    """GET a referenced WAF policy that list_all did not return: (model, None), or (None, unresolved record)."""
+    operation = f"network.web_application_firewall_policies.get ({basename(policy_id)})"
+    try:
         from azure.mgmt.network import NetworkManagementClient  # lazy
 
         client = NetworkManagementClient(
             credential=cred, subscription_id=subscription_from_id(policy_id), **arm_client_kwargs()
         )
-        return client.web_application_firewall_policies.get(resource_group_from_id(policy_id), basename(policy_id))
-
-    return collector.guard(f"network.web_application_firewall_policies.get ({basename(policy_id)})", _get)
+        return client.web_application_firewall_policies.get(resource_group_from_id(policy_id), basename(policy_id)), None
+    except Exception as exc:  # noqa: BLE001 — boundary: classify, don't crash the run
+        status = UNREADABLE_STATUS.get(getattr(exc, "status_code", None))
+        if status is None:
+            collector.record(operation, exc)
+            return None, unresolved_policy(policy_id)
+        logger.warning("%s: %s, recorded as unresolved", operation, status)
+        return None, unresolved_policy(policy_id, status, " ".join(str(exc).split())[:200])
 
 
 def referenced_policy_ids(gateway) -> set:
@@ -255,6 +265,7 @@ def summarize(gateways: list[dict], listeners: list[dict], policies: list[dict])
         ),
         "total_waf_policies": len(policies),
         "unresolved_waf_policies": sum(1 for p in policies if not p["resolved"]),
+        "unreadable_waf_policies": sum(1 for p in policies if p.get("read_status") in ("not_authorized", "not_found")),
         "policies_prevention": sum(1 for p in policies if p["state"] == "Enabled" and p["mode"] == "Prevention"),
         "policies_detection": sum(1 for p in policies if p["state"] == "Enabled" and p["mode"] == "Detection"),
         "policies_disabled": sum(1 for p in policies if p["state"] == "Disabled"),
@@ -265,13 +276,16 @@ def summarize(gateways: list[dict], listeners: list[dict], policies: list[dict])
 
 def build(raw_gateways: list, collector: Collector, subscription_id, cred) -> tuple[dict, dict]:
     policy_models = index_by_id(collect_policies(subscription_id, cred, collector))
+    unresolved_by_id = {}
     if cred is not None:
         for policy_id in sorted(set().union(*(referenced_policy_ids(g) for g in raw_gateways)) if raw_gateways else []):
             if arm_id_key(policy_id) not in policy_models:
-                fetched = fetch_policy(policy_id, cred, collector)
+                fetched, unresolved = fetch_policy(policy_id, cred, collector)
                 if fetched is not None:
                     policy_models[arm_id_key(policy_id)] = fetched
-    policies = {k: policy_record(p) for k, p in policy_models.items()}
+                else:
+                    unresolved_by_id[arm_id_key(policy_id)] = unresolved
+    policies = {k: policy_record(p) for k, p in policy_models.items()} | unresolved_by_id
     for g in raw_gateways:
         for policy_id in referenced_policy_ids(g):
             policies.setdefault(arm_id_key(policy_id), unresolved_policy(policy_id))

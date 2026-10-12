@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -27,6 +28,8 @@ from azure_common import (
 from dotenv import load_dotenv
 
 GATEWAY_TYPE = "microsoft.network/applicationgateways"
+# Resource Graph can lag list_all by minutes around a create or delete.
+RECOUNT_DELAY_SECONDS = 30
 ENCRYPTED_PROTOCOLS = ("Https", "Tls")
 
 
@@ -124,7 +127,9 @@ def resource_graph_gateway_count(subscription_id: str, cred: Any, collector: Col
     return collector.guard("resourcegraph.resources (application gateway count)", _count)
 
 
-def completeness(listed: Optional[int], true_count: Optional[int], collector: Collector) -> Dict[str, Any]:
+def completeness(
+    listed: Optional[int], true_count: Optional[int], collector: Collector, recounted: bool = False
+) -> Dict[str, Any]:
     """Compare the listed count to the independent one; a mismatch is a collection failure."""
     match = None if listed is None or true_count is None else listed == true_count
     if match is False:
@@ -135,7 +140,25 @@ def completeness(listed: Optional[int], true_count: Optional[int], collector: Co
                 f"counts {true_count} in the subscription"
             ),
         )
-    return {"listed": listed, "resource_graph_count": true_count, "match": match}
+    return {"listed": listed, "resource_graph_count": true_count, "match": match, "recounted": recounted}
+
+
+def collect_gateways(
+    subscription_id: str, cred: Any, collector: Collector, logger: logging.Logger, sleep: Callable[[float], None] = time.sleep
+) -> Tuple[Optional[List[Any]], Dict[str, Any]]:
+    """List the gateways and check the count, listing and counting once more after a delay on a mismatch."""
+    raw = list_gateways(subscription_id, cred, collector)
+    true_count = resource_graph_gateway_count(subscription_id, cred, collector)
+    recounted = raw is not None and true_count is not None and len(raw) != true_count
+    if recounted:
+        logger.warning(
+            "list_all returned %d gateways, Resource Graph counts %d; recounting in %ds",
+            len(raw), true_count, RECOUNT_DELAY_SECONDS,
+        )
+        sleep(RECOUNT_DELAY_SECONDS)
+        raw = list_gateways(subscription_id, cred, collector)
+        true_count = resource_graph_gateway_count(subscription_id, cred, collector)
+    return raw, completeness(None if raw is None else len(raw), true_count, collector, recounted)
 
 
 Build = Callable[[List[Any], Collector, Optional[str], Any], Tuple[Dict[str, Any], Dict[str, Any]]]
@@ -157,16 +180,14 @@ def run_fetcher(name: str, logger: logging.Logger, build: Build) -> int:
     cred = collector.guard("azure.identity.DefaultAzureCredential", credential)
 
     gateways: List[Any] = []
-    coverage: Dict[str, Any] = {"listed": None, "resource_graph_count": None, "match": None}
+    coverage: Dict[str, Any] = {"listed": None, "resource_graph_count": None, "match": None, "recounted": False}
     registration = REGISTRATION_UNKNOWN
     live = bool(subscription_id and cred is not None)
     if live:
         registration = provider_registration_status(collector, subscription_id, cred, "Microsoft.Network")
         if registration == NOT_REGISTERED:
             logger.warning("Microsoft.Network is not registered on subscription %s", subscription_id)
-        raw = list_gateways(subscription_id, cred, collector)
-        true_count = resource_graph_gateway_count(subscription_id, cred, collector)
-        coverage = completeness(None if raw is None else len(raw), true_count, collector)
+        raw, coverage = collect_gateways(subscription_id, cred, collector, logger)
         gateways = raw or []
     elif not subscription_id:
         collector.record(

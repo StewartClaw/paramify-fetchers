@@ -53,6 +53,8 @@ evidence_set:
     microsoft.network/applicationgateways; the run fails if the two differ
     (results.completeness.match false). Reader at subscription scope is
     sufficient.
+    Resource Graph can lag behind list_all around a create or delete, so a
+    mismatch is checked once more after 30 seconds (results.completeness.recounted).
 
     One record per backend setting in results.backend_settings, from the
     gateway's backendHttpSettingsCollection (layer "L7", protocol Http/Https)

@@ -55,6 +55,8 @@ evidence_set:
     'microsoft.network/applicationgateways' | count`). If the two counts differ,
     the run fails (results.completeness.match false). Reader at subscription
     scope is sufficient; all calls are GETs.
+    Resource Graph can lag behind list_all around a create or delete, so a
+    mismatch is checked once more after 30 seconds (results.completeness.recounted).
 
     One record per listener in results.listeners, from the gateway's
     httpListeners (layer "L7", protocol Http/Https) and listeners (layer "L4",
@@ -86,6 +88,10 @@ evidence_set:
 
     secure_transport is true for Https and Tls listeners, and for an Http
     listener that is redirect_only with an HTTPS target; otherwise false.
+    An L4 Tcp listener is always false and counts as plaintext, even when the
+    client's TLS passes straight through to the backend: the gateway does not
+    terminate or inspect it, so nothing here shows that the traffic is
+    encrypted.
     summary.plaintext_listeners counts the false ones, and
     summary.public_plaintext_listeners those on a public frontend. A stopped
     gateway is still listed; gateway_operational_state says so.
