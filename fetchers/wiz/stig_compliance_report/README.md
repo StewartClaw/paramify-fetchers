@@ -58,7 +58,7 @@ titles is still one row, with both titles. An assessment read in two passes
 3. **Paramify assessment**: a CONFIGURATION assessment with a file intake preset
    mapping the columns above (Record ID as unique ID, Resource Name as asset), and
    an upload key with `PIPELINE_INTAKE` and `PIPELINE_PROCESS` (plus
-   `PIPELINE_CLOSE` to close cycles). See [docs/pipelines.md](../../../docs/pipelines.md).
+   `PIPELINE_CLOSE` to close cycles). See [docs/pipelines_guide.md](../../../docs/pipelines_guide.md).
 4. **Manifest**:
 
 ```bash
