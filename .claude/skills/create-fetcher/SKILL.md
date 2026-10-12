@@ -99,13 +99,15 @@ this one cannot reach (Phase 4).
 ## Phase 1 — Orient
 
 Read these before building (skim, don't summarize back):
-- `docs/authoring_a_fetcher.md` — the net-new authoring guide. This is the
-  canonical reference for the rest of this skill; lean on it, don't restate it.
+- `docs/authoring_fetcher_guide.md` — the net-new authoring guide, one worked
+  example end to end. Lean on it, don't restate it.
 - `framework/schemas/fetcher_schema.json` — the enforced schema (required:
   name, version, description, runtime, output, secrets).
-- The closest **reference fetcher** to mirror — pick from the list in
-  `docs/authoring_a_fetcher.md` §"Reference fetchers" (single vs. fanout ×
-  bash vs. Python), so the skill never drifts from the maintained set.
+- The closest **reference fetcher** to mirror: single-target Python
+  `fetchers/okta/phishing_resistant_mfa/`, single-target bash
+  `fetchers/okta/authenticators/`, fanout Python with a per-target secret
+  `fetchers/gitlab/ci_cd_pipeline_config/`, or AWS region/profile fanout in bash
+  `fetchers/aws/auto_scaling_high_availability/`.
 
 ---
 
@@ -182,8 +184,9 @@ single confirmation before building.
 3. **Write `fetcher.yaml`** to the schema. Use the auth/fanout decisions from
    Phase 2. Include the `evidence_set` block.
 
-4. **Write the entry script** following `docs/authoring_a_fetcher.md`
-   §`fetcher.py` / §`fetcher.sh` (which link onward to the canonical skeleton).
+4. **Write the entry script** following `docs/authoring_fetcher_guide.md`
+   step 3 and the template's `fetcher.py` (bash: mirror
+   `fetchers/okta/authenticators/fetcher.sh`).
    Keep status output to one `logger.info`/`log_info` "Evidence saved to …"
    line on success. Mirror the reference fetcher's shape.
 
@@ -192,8 +195,8 @@ single confirmation before building.
    measured platform quirk, a non-obvious guard). What each field means and how
    it is derived goes in `evidence_set.instructions`, not a docstring.
 
-5. **Wire failure → exit code** per `docs/authoring_a_fetcher.md` §"Detecting
-   collection failures": track collection failures, exit non-zero if any
+5. **Wire failure → exit code** per `docs/authoring_fetcher_guide.md`
+   step 3: track collection failures, exit non-zero if any
    occurred (Python: an `api_failures` list; bash: a temp-file counter).
 
 6. **Report the reason on the failure path** — two lines, both required, per
@@ -212,7 +215,7 @@ single confirmation before building.
    recorded only there cannot reach `metadata.error`. Do record it there as well
    though — `metadata.partial_failure` plus `metadata.api_failures[]` of
    `{operation, type, message}`, that shape exactly — so the evidence file is
-   honest to whoever opens it. See `docs/fetcher_contract.md` § Output.
+   honest to whoever opens it. See `docs/fetcher_contract_guide.md` step 5.
 
 7. If bash: `chmod +x fetchers/<category>/<short_name>/fetcher.sh`.
 
@@ -265,9 +268,6 @@ The skill verifies **wiring**, not data — it can't hit the user's real tenant.
 
 ## Anti-patterns
 
-Full list in `docs/authoring_a_fetcher.md` §"What you don't need to do". The
-ones that bite most often:
-
 - Directory `<category>_<short_name>/` → use `<short_name>/` only.
 - `version: 1.0.0` → `0.1.0` for pre-contract fetchers.
 - Emitting an envelope (`metadata`+`payload`) → write a raw evidence dict; the
@@ -277,3 +277,7 @@ ones that bite most often:
   from env.
 - Forgetting `chmod +x` on a bash entry script.
 - A multi-paragraph docstring restating `evidence_set.instructions` → one line.
+- Importing another category's `_shared/` module → only your own `_shared/`
+  and `fetchers/_lib/`.
+- `controls`, `solution_capabilities` or `validation_rules` in `fetcher.yaml`
+  → leave them out; that mapping lives in Paramify.
