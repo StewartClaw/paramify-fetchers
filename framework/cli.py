@@ -70,7 +70,7 @@ Two upload commands: evidence fetchers write enveloped JSON that `paramify
 upload` attaches to evidence sets, while `kind: issue_report` fetchers write raw
 scan files to <run>/issue-reports/ that `paramify issues upload` sends into the
 assessment's pipeline and processes. A run of both needs both commands. See
-docs/issue_report_fetchers.md. `kind: inventory` fetchers are evidence whose
+docs/issue_report_fetchers_guide.md. `kind: inventory` fetchers are evidence whose
 records an inventory pipeline turns into Inventory; `paramify upload` sends one
 only when the run collected all of it. See docs/inventory_fetchers.md.
 """

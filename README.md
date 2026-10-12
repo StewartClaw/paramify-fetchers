@@ -410,7 +410,7 @@ CSV/XML/JSON/Nessus structure, so anything added to it breaks the parse. That on
 constraint is what makes this a separate kind with a separate uploader instead of
 a flag on the existing one. Wiz ships the first three — STIG compliance, Issues
 report and vulnerability findings (see [`fetchers/wiz/README.md`](fetchers/wiz/README.md#issue-reports));
-to write another, start from [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md).
+to write another, start from [`docs/issue_report_fetchers_guide.md`](docs/issue_report_fetchers_guide.md).
 
 ### Inventory
 
