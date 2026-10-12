@@ -5,7 +5,7 @@ call ONLY this module. They never re-implement discovery, validation, manifest
 editing, or execution; they differ only in how they render the JSON-able values
 these functions return.
 
-Design constraints (see docs/config_injection_design.md, CLAUDE.md):
+Design constraints:
 - The editable artifact is the manifest (customer-side values). Declarations
   (fetcher.yaml, fetchers/_categories/*.yaml) are read-only — they generate the
   form via catalog(); we never write into fetchers/.
