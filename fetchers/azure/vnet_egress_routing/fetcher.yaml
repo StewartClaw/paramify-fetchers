@@ -66,8 +66,21 @@ evidence_set:
     user-defined 0.0.0.0/0 beats it. Such a subnet is "appliance" with
     default_route.source "virtual_hub", next_hop_resource_id the policy's next hop, and
     appliance_owner "azure_firewall" (or "hub_appliance" for an NVA). The default route
-    is not advertised across hubs, so only the directly connected hub counts; a hub in
-    another subscription is not seen.
+    is not advertised across hubs, so only the directly connected hub counts. A spoke
+    is recognised from its own side by the peering every hub connection adds to a
+    Microsoft-managed HV_<hub>_<guid> VNet (virtual_hub_spoke, virtual_hub_name). When
+    no hub in this subscription connects it, the hub is looked for in every other
+    enabled subscription the credential can see (subscriptions.list(), then
+    virtual_hubs.list() per subscription and the same per-hub calls), so the fetcher
+    identity needs Reader on the hub's subscription as well. A spoke whose hub is still
+    not found has virtual_hub_resolved false, and its subnets that the hub's default
+    route would reach read "virtual_hub_unresolved" (default_route.source the same),
+    never "default_outbound": their egress cannot be told from this side.
+    virtual_hub_search records how many spokes needed the search, the subscriptions
+    searched, how many spokes were found and any call that failed; a failure there
+    does not fail the run, because the spokes it leaves unfound already say so. Hubs
+    from another subscription appear in virtual_hubs with their subscription_id; their
+    Azure Firewall is that subscription's own evidence.
     egress_path per subnet is derived from the subnet's route table, IPv4 only: a
     user-defined 0.0.0.0/0 route to VirtualAppliance or VirtualApplianceEcmp is
     "appliance", to None is "blackhole", to VirtualNetworkGateway is "gateway", any
@@ -76,7 +89,8 @@ evidence_set:
     the VNet's default public NAT gateway gives "nat_gateway"; otherwise
     default_outbound_access decides: null or true is "default_outbound" (null
     implicitly allows outbound, so default_outbound_access_effective reports it as
-    true), false is "none". GatewaySubnet, AzureBastionSubnet, AzureFirewallSubnet,
+    true), false is "none" — unless a Virtual WAN hub's default route applies (above).
+    GatewaySubnet, AzureBastionSubnet, AzureFirewallSubnet,
     AzureFirewallManagementSubnet and RouteServerSubnet are "platform_managed" — Azure
     sets their routing rules. A network interface takes its subnet's path, except that
     one with a public IP on a "default_outbound" or "none" subnet is "public_ip".

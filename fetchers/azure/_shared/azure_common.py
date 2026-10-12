@@ -15,7 +15,7 @@ import sys
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 # One implementation per runtime lives in fetchers/_lib; a category-shared module
 # may RE-EXPORT it and must not reimplement it (docs/fetcher_contract_guide.md, step 6).
@@ -351,6 +351,19 @@ def arm_client_kwargs() -> Dict[str, Any]:
     return {"base_url": endpoint, "credential_scopes": [f"{endpoint}/.default"]}
 
 
+def enabled_subscription_ids(cred) -> Iterator[str]:
+    """Every *enabled* subscription the credential can see, lazily."""
+    from azure.mgmt.subscription import SubscriptionClient  # lazy
+
+    client = SubscriptionClient(cred, **arm_client_kwargs())
+    for sub in client.subscriptions.list():
+        # SubscriptionState serializes as "Enabled", its repr as
+        # "SubscriptionState.ENABLED"; both contain "enabled", while "Disabled",
+        # "Warned", "PastDue" and "Deleted" do not.
+        if "enabled" in str(getattr(sub, "state", "")).lower() and getattr(sub, "subscription_id", None):
+            yield sub.subscription_id
+
+
 def resolve_subscription(collector: Collector) -> Dict[str, Optional[str]]:
     """Resolve the subscription to collect from.
 
@@ -361,19 +374,9 @@ def resolve_subscription(collector: Collector) -> Dict[str, Optional[str]]:
     if explicit:
         return {"subscription_id": explicit, "subscription_source": "target"}
 
-    def _discover() -> Optional[str]:
-        from azure.mgmt.subscription import SubscriptionClient  # lazy
-
-        client = SubscriptionClient(credential(), **arm_client_kwargs())
-        for sub in client.subscriptions.list():
-            # SubscriptionState serializes as "Enabled", its repr as
-            # "SubscriptionState.ENABLED"; both contain "enabled", while "Disabled",
-            # "Warned", "PastDue" and "Deleted" do not.
-            if "enabled" in str(getattr(sub, "state", "")).lower():
-                return getattr(sub, "subscription_id", None)
-        return None
-
-    subscription_id = collector.guard("subscription.subscriptions.list", _discover)
+    subscription_id = collector.guard(
+        "subscription.subscriptions.list", lambda: next(enabled_subscription_ids(credential()), None)
+    )
     return {
         "subscription_id": subscription_id,
         "subscription_source": "ambient_default" if subscription_id else "unresolved",

@@ -23,10 +23,12 @@ schemas and the `paramify` CLI — not the internal code.
   its own and its peers' address ranges that are not forced through the appliance.
   Every route table says whether a subnet uses it, and every Azure Firewall carries
   its tier, policy, effective threat-intelligence mode and the subnets routed
-  through it. Configured routes only: effective routes need an action Reader does
-  not have. A hub in another subscription is not seen, so its spokes read
-  `default_outbound`. Tested read-only against a production subscription, where
-  every count matched Resource Graph.
+  through it. A spoke VNet is recognised from its own peerings even when its hub is
+  in a separate connectivity subscription. The hub is then looked for in every other
+  subscription the credential can read; one still not found reads
+  `virtual_hub_unresolved`, not `default_outbound`. Configured routes only:
+  effective routes need an action Reader does not have. Tested read-only against a
+  production subscription, where every count matched Resource Graph.
 - **`azure_ddos_protection`** (`EVD-AZURE-DDOS`) — every public IP, what holds it,
   its virtual network and its `effective_protection`: `network_protection` (a DDoS
   plan on the VNet), `ip_protection`, `none`, `disabled`, or `unknown` where the

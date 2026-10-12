@@ -4,6 +4,7 @@
 import ipaddress
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -17,10 +18,12 @@ from azure_common import (  # noqa: E402
     Collector,
     arm_client_kwargs,
     arm_id_key,
+    basename,
     vnet_id_of,
     build_payload,
     classify_failure_code,
     credential,
+    enabled_subscription_ids,
     failure_reason,
     model_attr,
     provider_registration_status,
@@ -44,7 +47,11 @@ PLATFORM_SUBNETS = {
 }
 SUBNET_EGRESS_PATHS = (
     "appliance", "blackhole", "gateway", "nat_gateway", "default_outbound", "none", "other",
-    "platform_managed",
+    "virtual_hub_unresolved", "platform_managed",
+)
+# Measured: a Virtual WAN hub connection peers the spoke to a Microsoft-managed HV_<hub>_<guid> VNet.
+HUB_PEER_VNET = re.compile(
+    r"/virtualNetworks/HV_(.+)_[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$", re.IGNORECASE
 )
 NIC_EGRESS_PATHS = SUBNET_EGRESS_PATHS + ("public_ip", "mixed")
 
@@ -319,6 +326,14 @@ def hub_routes_by_vnet(hubs: list[dict]) -> dict:
     return index
 
 
+def hub_spoke_name(peers: list[dict]):
+    """The Virtual WAN hub a VNet's own peerings say it connects to: its name, "" if unreadable, None if not a spoke."""
+    names = [m.group(1) for p in peers if (m := HUB_PEER_VNET.search(p.get("remote_virtual_network_id") or ""))]
+    if names:
+        return names[0]
+    return "" if any((p.get("name") or "").lower().startswith("remotevnettohubpeering") for p in peers) else None
+
+
 def subnet_record(
     subnet: dict, vnet: dict, tables_by_id: dict, peers: list[dict], appliances: dict, hub_routes: dict
 ) -> dict:
@@ -329,9 +344,21 @@ def subnet_record(
     bgp = not (table and table.get("disable_bgp_route_propagation"))
     hub = hub_routes.get(arm_id_key(vnet["id"])) or {}
     # A hub's propagated 0.0.0.0/0 beats the system route and NAT gateway, but not a user-defined default route.
-    hub_hop = hub.get("internet_next_hop") if route is None and bgp and path in ("default_outbound", "none", "nat_gateway") else None
+    hub_may_route = route is None and bgp and path in ("default_outbound", "none", "nat_gateway")
+    hub_hop = hub.get("internet_next_hop") if hub_may_route else None
+    unresolved = hub_may_route and not hub and hub_spoke_name(peers) is not None
     if hub_hop:
         path = "appliance"
+    elif unresolved:
+        path = "virtual_hub_unresolved"
+    if route:
+        source, hop_type = "user_defined", route.get("next_hop_type")
+    elif hub_hop:
+        source, hop_type = "virtual_hub", "VirtualHub"
+    elif unresolved:
+        source, hop_type = "virtual_hub_unresolved", None
+    else:
+        source, hop_type = "system", "Internet"
     connected = [p for p in peers if p.get("peering_state") == "Connected"]
     reachable = [arm_id_key(vnet["id"]), *(arm_id_key(p.get("remote_virtual_network_id")) for p in connected), HUB]
     owner, firewall_ids = None, []
@@ -361,8 +388,8 @@ def subnet_record(
         "route_table_id": subnet.get("route_table_id"),
         "bgp_route_propagation": bgp,
         "default_route": {
-            "source": "user_defined" if route else "virtual_hub" if hub_hop else "system",
-            "next_hop_type": route.get("next_hop_type") if route else "VirtualHub" if hub_hop else "Internet",
+            "source": source,
+            "next_hop_type": hop_type,
             "next_hop_ip_addresses": route.get("next_hop_ip_addresses", []) if route else [],
             "next_hop_resource_id": hub_hop,
         },
@@ -381,6 +408,35 @@ def subnet_record(
             p for p in vnet.get("address_prefixes") or [] if not forced_through_appliance(p, routes)
         ],
         "unrouted_peered_prefixes": [p for p in peer_prefixes if not forced_through_appliance(p, routes)],
+    }
+
+
+def virtual_network_record(vnet: dict, peers: list[dict], hub_routes: dict) -> dict:
+    hub = hub_routes.get(arm_id_key(vnet["id"]))
+    spoke_name = hub_spoke_name(peers)
+    spoke = hub is not None or spoke_name is not None
+    return {
+        "id": vnet["id"],
+        "name": vnet["name"],
+        "location": vnet["location"],
+        "resource_group": resource_group_from_id(vnet["id"]),
+        "address_prefixes": vnet["address_prefixes"],
+        "default_public_nat_gateway_id": vnet["default_public_nat_gateway_id"],
+        "subnet_count": len(vnet["subnets"]),
+        "virtual_hub_spoke": spoke,
+        "virtual_hub_resolved": (hub is not None) if spoke else None,
+        "virtual_hub_name": basename(hub["virtual_hub_id"]) if hub else spoke_name or None,
+        "virtual_hub_id": (hub or {}).get("virtual_hub_id"),
+        "virtual_hub_internet_next_hop": (hub or {}).get("internet_next_hop"),
+        "virtual_hub_private_traffic_next_hop": (hub or {}).get("private_next_hop"),
+        "connected_peer_prefixes": sorted(
+            {
+                p
+                for peer in peers
+                if peer.get("peering_state") == "Connected"
+                for p in peer.get("remote_address_prefixes") or []
+            }
+        ),
     }
 
 
@@ -499,6 +555,8 @@ def summarize(
             1 for n in nics if n["default_outbound_connectivity_enabled"]
         ),
         "total_virtual_hubs": len(hubs),
+        "virtual_hub_spokes": sum(1 for v in vnets if v["virtual_hub_spoke"]),
+        "virtual_hub_spokes_unresolved": sum(1 for v in vnets if v["virtual_hub_resolved"] is False),
         "total_azure_firewalls": len(firewalls),
         "azure_firewalls_by_effective_threat_intel_mode": {
             mode: sum(1 for f in firewalls if f["effective_threat_intel_mode"] == mode)
@@ -520,29 +578,7 @@ def build_records(
         for v in raw_vnets
         for s in v["subnets"]
     ]
-    vnets = [
-        {
-            "id": v["id"],
-            "name": v["name"],
-            "location": v["location"],
-            "resource_group": resource_group_from_id(v["id"]),
-            "address_prefixes": v["address_prefixes"],
-            "default_public_nat_gateway_id": v["default_public_nat_gateway_id"],
-            "subnet_count": len(v["subnets"]),
-            "virtual_hub_id": hub_routes.get(arm_id_key(v["id"]), {}).get("virtual_hub_id"),
-            "virtual_hub_internet_next_hop": hub_routes.get(arm_id_key(v["id"]), {}).get("internet_next_hop"),
-            "virtual_hub_private_traffic_next_hop": hub_routes.get(arm_id_key(v["id"]), {}).get("private_next_hop"),
-            "connected_peer_prefixes": sorted(
-                {
-                    p
-                    for peer in peers_by_vnet.get(arm_id_key(v["id"]), [])
-                    if peer.get("peering_state") == "Connected"
-                    for p in peer.get("remote_address_prefixes") or []
-                }
-            ),
-        }
-        for v in raw_vnets
-    ]
+    vnets = [virtual_network_record(v, peers_by_vnet.get(arm_id_key(v["id"]), []), hub_routes) for v in raw_vnets]
     path_by_subnet = {arm_id_key(s["id"]): s["egress_path"] for s in subnets}
     nics = [network_interface_record(n, path_by_subnet) for n in raw_nics]
     tables = [route_table_record(t) for t in raw_tables]
@@ -553,6 +589,7 @@ def build_records(
             "id": h["id"],
             "name": h["name"],
             "location": h["location"],
+            "subscription_id": h["id"].split("/")[2],
             "resource_group": resource_group_from_id(h["id"]),
             "firewall_id": h["firewall_id"],
             "routing_policies": h["routing_policies"],
@@ -567,12 +604,71 @@ def build_records(
     return by_id(vnets), by_id(subnets), by_id(tables), by_id(nics), by_id(firewalls), by_id(hubs)
 
 
+def unresolved_spokes(vnets: list[dict], peers_by_vnet: dict, hubs: list[dict]) -> dict:
+    """Lower-cased VNet id -> hub name, for spoke VNets that none of `hubs` connects."""
+    connected = hub_routes_by_vnet(hubs)
+    spokes = {}
+    for vnet in vnets:
+        key = arm_id_key(vnet["id"])
+        name = hub_spoke_name(peers_by_vnet.get(key, []))
+        if name is not None and key not in connected:
+            spokes[key] = name
+    return spokes
+
+
 # --- collection (lazy azure imports) ---
+
+def new_hub_search() -> dict:
+    return {"spokes_needing_search": 0, "subscriptions_searched": [], "spokes_found": 0, "failures": []}
+
+
+def _attempt(search: dict, operation: str, fn, default):
+    try:
+        return fn()
+    except Exception as exc:  # noqa: BLE001 — a spoke left unfound reads virtual_hub_unresolved; this subscription's evidence is whole
+        search["failures"].append({"operation": operation, "type": type(exc).__name__, "message": str(exc)})
+        logger.warning("Virtual hub search: %s failed (%s: %s)", operation, type(exc).__name__, exc)
+        return default
+
+
+def remote_virtual_hubs(subscription_ids, network_client, unresolved: dict, search: dict) -> list:
+    """Hubs in other subscriptions that connect an unresolved spoke; each spoke found leaves `unresolved`."""
+    names = {n.lower() for n in unresolved.values()}
+    hubs = []
+    for sub in subscription_ids:
+        if not unresolved:
+            break
+        search["subscriptions_searched"].append(sub)
+        client = _attempt(search, f"network.NetworkManagementClient ({sub})", lambda: network_client(sub), None)
+        listed = _attempt(search, f"network.virtual_hubs.list({sub})", lambda: list(client.virtual_hubs.list()), []) if client else []
+        for hub in listed:
+            rg, name = resource_group_from_id(model_attr(hub, "id")), model_attr(hub, "name")
+            if "" not in names and (name or "").lower() not in names:
+                continue
+            connections = _attempt(
+                search, f"network.hub_virtual_network_connections.list({name})",
+                lambda: list(client.hub_virtual_network_connections.list(rg, name)), [],
+            )
+            if not any(arm_id_key(model_attr(model_attr(c, "remote_virtual_network"), "id")) in unresolved for c in connections):
+                continue
+            record = project_virtual_hub(
+                hub,
+                _attempt(search, f"network.routing_intent.list({name})", lambda: list(client.routing_intent.list(rg, name)), []),
+                connections,
+                _attempt(search, f"network.hub_route_tables.list({name})", lambda: list(client.hub_route_tables.list(rg, name)), []),
+            )
+            hubs.append(record)
+            for key in hub_routes_by_vnet([record]):
+                if unresolved.pop(key, None) is not None:
+                    search["spokes_found"] += 1
+    return hubs
+
 
 def collect(subscription_id, cred, collector: Collector):
     """VNets, peerings, route tables, NICs, Azure Firewalls and policies, and Virtual WAN hub routing."""
     from azure.mgmt.network import NetworkManagementClient
 
+    search = new_hub_search()
     client = collector.guard(
         "network.NetworkManagementClient (init)",
         lambda: NetworkManagementClient(
@@ -580,7 +676,7 @@ def collect(subscription_id, cred, collector: Collector):
         ),
     )
     if client is None:
-        return [], {}, [], [], [], [], []
+        return ([], {}, [], [], [], [], []), search
 
     vnets = collector.guard(
         "network.virtual_networks.list_all",
@@ -632,7 +728,21 @@ def collect(subscription_id, cred, collector: Collector):
             ),
             collector.guard(f"network.hub_route_tables.list({name})", lambda: list(client.hub_route_tables.list(rg, name)), default=[]),
         ))
-    return vnets, peers_by_vnet, tables, nics, firewalls, policies, hubs
+    # A spoke's hub often lives in a separate connectivity subscription; look in every other one this credential sees.
+    unresolved = unresolved_spokes(vnets, peers_by_vnet, hubs)
+    search["spokes_needing_search"] = len(unresolved)
+    if unresolved:
+        others = _attempt(
+            search, "subscription.subscriptions.list",
+            lambda: [s for s in enabled_subscription_ids(cred) if s.lower() != subscription_id.lower()], [],
+        )
+        hubs += remote_virtual_hubs(
+            others,
+            lambda sub: NetworkManagementClient(credential=cred, subscription_id=sub, **arm_client_kwargs()),
+            unresolved,
+            search,
+        )
+    return (vnets, peers_by_vnet, tables, nics, firewalls, policies, hubs), search
 
 
 def main() -> int:
@@ -650,7 +760,7 @@ def main() -> int:
     subscription_id = sub["subscription_id"]
     cred = collector.guard("azure.identity.DefaultAzureCredential", credential)
 
-    raw = ([], {}, [], [], [], [], [])
+    raw, search = ([], {}, [], [], [], [], []), new_hub_search()
     registration = REGISTRATION_UNKNOWN
     if subscription_id and cred is not None:
         registration = provider_registration_status(collector, subscription_id, cred, "Microsoft.Network")
@@ -659,7 +769,7 @@ def main() -> int:
                 "Microsoft.Network is not registered on subscription %s — reporting status not_registered",
                 subscription_id,
             )
-        raw = collect(subscription_id, cred, collector)
+        raw, search = collect(subscription_id, cred, collector)
     elif not subscription_id:
         collector.record(
             "resolve_subscription",
@@ -681,6 +791,7 @@ def main() -> int:
             "network_interfaces": nics,
             "azure_firewalls": firewalls,
             "virtual_hubs": hubs,
+            "virtual_hub_search": search,
             "provider_registration_status": registration,
         },
         summary={
