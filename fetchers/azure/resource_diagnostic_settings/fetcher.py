@@ -28,11 +28,11 @@ from azure_common import (  # noqa: E402
     write_evidence,
     report_failure,
 )
-from monitor_diagnostics import (  # noqa: E402
+from diagnostics import (  # noqa: E402
     CATEGORY_TYPE_LOGS,
     CATEGORY_TYPE_METRICS,
     DESTINATION_LOG_ANALYTICS,
-    destinations,
+    diagnostic_destinations,
     enabled_categories,
     enabled_category_groups,
     project_category,
@@ -109,7 +109,7 @@ def with_storage_children(resources: list[dict]) -> list[dict]:
 
 def setting_record(setting: dict) -> dict:
     logs = setting["logs"]
-    sinks = destinations(setting)
+    sinks = diagnostic_destinations(setting)
     categories, groups = enabled_categories(logs), enabled_category_groups(logs)
     return {
         **setting,
