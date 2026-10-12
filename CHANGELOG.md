@@ -185,7 +185,7 @@ schemas and the `paramify` CLI — not the internal code.
   `metadata.evidence_set`, and both uploaders send it when they create a set.
   Sets that already exist keep the frequency they have. The uploader config can
   override it per fetcher, like `name` and `instructions`.
-- **`docs/pipelines.md`: sending scan reports from the TUI**, step by step
+- **`docs/pipelines_guide.md`: sending scan reports from the TUI**, step by step
   with three recordings. It covers a manifest for the scanners, pointing each
   fetcher at an assessment and choosing its close policy, running and sending
   from the Paramify tab, and jobs and manual closes. It explains how cycles

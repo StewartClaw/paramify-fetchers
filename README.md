@@ -127,7 +127,7 @@ manifest, runs it, and reviews evidence — all without leaving the keyboard:
 **Sending scan reports** (Nessus, Wiz, STIG results and the like) into Paramify
 pipelines is its own short setup — a manifest for the scanners, an assessment and
 close policy for each, then send from the Paramify tab. The walkthrough, with
-recordings, is [`docs/pipelines.md`](docs/pipelines.md).
+recordings, is [`docs/pipelines_guide.md`](docs/pipelines_guide.md).
 
 > **Zero-credential first run:** the bundled `demo_hello` fetcher emits synthetic
 > evidence, so you can watch the whole collect → envelope pipeline before wiring
@@ -616,6 +616,7 @@ To add evidence collection for a new control or a new tool, see [`docs/authoring
 | [`fetchers/servicenow/README.md`](fetchers/servicenow/README.md) | ServiceNow service-account basic auth + the per-instance endpoint URLs |
 | [`uploaders/paramify_evidence/README.md`](uploaders/paramify_evidence/README.md) | Paramify API key setup + upload options |
 | [`uploaders/paramify_issues/README.md`](uploaders/paramify_issues/README.md) | Intaking raw scan reports into an assessment + why the file is never touched |
+| [`docs/pipelines_guide.md`](docs/pipelines_guide.md) | End-to-end: scan manifest → assessment + close policy → run → `paramify issues upload` → jobs and cycles → verify in Paramify |
 | [`uploaders/paramify_scripts/README.md`](uploaders/paramify_scripts/README.md) | Syncing fetcher entry scripts to Paramify + the association model |
 | [`docs/suggest_validator_guide.md`](docs/suggest_validator_guide.md) | End-to-end: API key → `/suggest-validator` → sync → verify validators in Paramify |
 | [`docs/validators_guide.md`](docs/validators_guide.md) | By hand: write a validator and its cases → `paramify validators check` → sync → verify in Paramify |
