@@ -21,7 +21,7 @@ Driven through the aws CLI, like every other AWS fetcher: same credential chain,
 same profile and region handling from a manifest target, and nothing new to
 install. Calls run in parallel across regions.
 
-Output: $EVIDENCE_DIR/aws_discovery_<profile|ambient>.json
+Output: $EVIDENCE_DIR/aws_discovery_beta_<profile|ambient>.json
 """
 
 import json
@@ -48,7 +48,7 @@ from discovery import (  # noqa: E402
 )
 from fetcher_status import report_failure  # noqa: E402
 
-FETCHER = "aws_discovery"
+FETCHER = "aws_discovery_beta"
 WORKERS = 24
 CALL_TIMEOUT = 180
 

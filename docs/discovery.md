@@ -7,8 +7,12 @@ read, and writes one document. Nothing is uploaded. The document is for the
 person deciding which fetchers to run and how to configure them, and today they
 answer that from memory or by clicking through the vendor's console.
 
+Discovery is in beta, which is what the `_beta` suffix on each discovery
+fetcher's name means: the document shape and the fetchers' coverage may still
+change.
+
 ```bash
-paramify run manifests/knowbe4-discovery.yaml   # → run-<ts>/discovery/knowbe4_discovery.json
+paramify run manifests/knowbe4-discovery.yaml   # → run-<ts>/discovery/knowbe4_discovery_beta.json
 ```
 
 ## Why it is a fetcher kind
@@ -114,9 +118,9 @@ RESOURCES = [
 
 Two references, deliberately unlike each other:
 
-- [`fetchers/knowbe4/discovery/fetcher.py`](../fetchers/knowbe4/discovery/fetcher.py):
+- [`fetchers/knowbe4/discovery_beta/fetcher.py`](../fetchers/knowbe4/discovery_beta/fetcher.py):
   a SaaS REST API. `HttpClient` plus cursor paging; one tenant, no scopes.
-- [`fetchers/aws/discovery/fetcher.py`](../fetchers/aws/discovery/fetcher.py):
+- [`fetchers/aws/discovery_beta/fetcher.py`](../fetchers/aws/discovery_beta/fetcher.py):
   a cloud driven through its CLI. `pages` shells out to `aws` (which pages
   itself) with a JMESPath query that flattens each record to `{id, name, ...}`;
   each `Resource` sets its own `source`; regional types are listed per region
@@ -176,7 +180,7 @@ Choosing what to list:
   `InvalidAccessException`, `AWSOrganizationsNotInUseException`, …) is
   `not_enabled`; `AccessDenied` and friends, including a service control
   policy's explicit deny, are `denied`; anything else is `error`.
-- Each target writes `aws_discovery_<profile|ambient>.json`, so a fanout across
+- Each target writes `aws_discovery_beta_<profile|ambient>.json`, so a fanout across
   accounts produces one document per account.
 - `regions` in config limits the regions listed; by default every region
   enabled for the account is.

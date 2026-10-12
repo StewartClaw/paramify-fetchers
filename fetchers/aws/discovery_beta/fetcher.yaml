@@ -1,4 +1,4 @@
-name: aws_discovery
+name: aws_discovery_beta
 version: 0.1.0
 description: Lists what this identity can see in one AWS account — about 75 resource types covering every service the AWS fetchers read, in every region enabled for the account, with whether each could be read per region — plus a count per resource type from AWS Resource Explorer wherever it has an index. A discovery document, not evidence; it is never uploaded. IAM users are counted, never listed.
 category: aws
@@ -22,7 +22,7 @@ runtime:
 
 output:
   type: json
-  path: aws_discovery.json
+  path: aws_discovery_beta.json
   aggregation: per_target
 
 target_schema:

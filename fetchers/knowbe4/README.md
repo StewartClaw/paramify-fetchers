@@ -27,7 +27,7 @@ Three of the four fetchers measure *specific* groups and campaigns, so they need
 
 `knowbe4_module_based_summary` reports on whatever the tenant has, so it needs no config and works against any tenant as-is.
 
-To find the exact titles to use, run `knowbe4_discovery`: it lists every group,
+To find the exact titles to use, run `knowbe4_discovery_beta`: it lists every group,
 training campaign, module, policy and phishing campaign the key can see, without
 any config, so you can copy exact names from its JSON output. It is never
 uploaded. Or ask the API directly:

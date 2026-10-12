@@ -36,7 +36,7 @@ from framework.discovery import (
 from framework.runner.executor import invocation_dir
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FETCHER_DIR = REPO_ROOT / "fetchers" / "knowbe4" / "discovery"
+FETCHER_DIR = REPO_ROOT / "fetchers" / "knowbe4" / "discovery_beta"
 FETCHER_SCHEMA = json.loads((REPO_ROOT / "framework" / "schemas" / "fetcher_schema.json").read_text())
 
 
@@ -149,10 +149,10 @@ def test_an_unknown_status_is_rejected():
 def test_documents_are_found_in_a_run_dir_and_unwrapped(tmp_path):
     run_dir = tmp_path / "run-x"
     (run_dir / DISCOVERY_DIR).mkdir(parents=True)
-    doc_path = run_dir / DISCOVERY_DIR / "knowbe4_discovery.json"
+    doc_path = run_dir / DISCOVERY_DIR / "knowbe4_discovery_beta.json"
     doc_path.write_text(json.dumps({
         "schema_version": "1.0",
-        "metadata": {"run_id": "r1", "exit_code": 0, "fetcher_name": "knowbe4_discovery"},
+        "metadata": {"run_id": "r1", "exit_code": 0, "fetcher_name": "knowbe4_discovery_beta"},
         "payload": _doc(OK_GROUP),
     }))
     assert find_documents(run_dir) == [doc_path]
@@ -275,7 +275,7 @@ def run_discovery(tmp_path, monkeypatch, session=None, retry_waits="0 0"):
     }.items():
         monkeypatch.setenv(k, v)
     code = _load_fetcher().main(session=session)
-    out = out_dir / "knowbe4_discovery.json"
+    out = out_dir / "knowbe4_discovery_beta.json"
     doc = json.loads(out.read_text()) if out.exists() else None
     status = json.loads(status_file.read_text()) if status_file.exists() else None
     return code, doc, status, session
@@ -424,7 +424,7 @@ def test_the_same_type_and_scope_twice_is_rejected():
 # The AWS fetcher, against a fake aws CLI
 # --------------------------------------------------------------------------- #
 
-AWS_DIR = REPO_ROOT / "fetchers" / "aws" / "discovery"
+AWS_DIR = REPO_ROOT / "fetchers" / "aws" / "discovery_beta"
 
 
 def _load_aws():
@@ -611,7 +611,7 @@ def test_aws_regions_can_be_limited_in_config(tmp_path, monkeypatch):
 def test_aws_each_target_writes_its_own_file(tmp_path, monkeypatch):
     """A fanout over profiles must not overwrite one account's document with the next."""
     _, _, _, _, outs = run_aws(tmp_path, monkeypatch, profile="prod/admin")
-    assert [o.name for o in outs] == ["aws_discovery_prod_admin.json"]
+    assert [o.name for o in outs] == ["aws_discovery_beta_prod_admin.json"]
 
 
 def test_aws_expired_credentials_fail_before_anything_is_listed(tmp_path, monkeypatch):

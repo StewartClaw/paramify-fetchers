@@ -10,7 +10,7 @@ is uploaded.
 Every list call is a Reporting API collection endpoint, paged by cursor.
 KnowBe4 retires the `page` parameter in November 2026, so this never uses it.
 
-Output: $EVIDENCE_DIR/knowbe4_discovery.json
+Output: $EVIDENCE_DIR/knowbe4_discovery_beta.json
 Required env: KNOWBE4_API_KEY, KNOWBE4_REGION
 """
 
@@ -36,7 +36,7 @@ from discovery import (  # noqa: E402
 )
 from fetcher_status import report_failure  # noqa: E402
 
-FETCHER = "knowbe4_discovery"
+FETCHER = "knowbe4_discovery_beta"
 PER_PAGE = 500
 MAX_PAGES = 1000
 

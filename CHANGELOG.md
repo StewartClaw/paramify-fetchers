@@ -98,10 +98,10 @@ schemas and the `paramify` CLI — not the internal code.
   with nothing in it. Records about people are counted, never listed. The
   shared engine in `fetchers/_lib/discovery.py` handles paging, retries and the
   document, so a platform's fetcher is a table of resources plus its paging. The
-  first is `knowbe4_discovery`: account, groups, training campaigns, modules,
+  first is `knowbe4_discovery_beta`: account, groups, training campaigns, modules,
   policies, phishing campaigns and tests, and user and enrollment counts. It
   pages by cursor, since KnowBe4 retires the `page` parameter in November 2026.
-  The second is `aws_discovery`: about 75 resource types, at least one for every
+  The second is `aws_discovery_beta`: about 75 resource types, at least one for every
   AWS service an AWS fetcher reads (a test keeps that true), listed in every
   enabled region through the aws CLI, plus a count per resource type from AWS
   Resource Explorer wherever it has an index, with each (type, region) pair carrying

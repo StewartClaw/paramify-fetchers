@@ -433,7 +433,7 @@ to configure them.
 paramify run manifest.yaml                    # → run-<ts>/discovery/<fetcher>.json
 ```
 
-KnowBe4 and AWS have one today (`knowbe4_discovery`, `aws_discovery`). See [`docs/discovery.md`](docs/discovery.md).
+KnowBe4 and AWS have one today (`knowbe4_discovery_beta`, `aws_discovery_beta`). See [`docs/discovery.md`](docs/discovery.md).
 
 ### Show how evidence is generated (optional)
 
