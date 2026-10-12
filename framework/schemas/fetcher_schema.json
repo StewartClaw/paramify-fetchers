@@ -100,7 +100,7 @@
 
     "evidence_set": {
       "type": "object",
-      "description": "Paramify evidence-set identity for this fetcher (1 fetcher = 1 evidence set). Fetcher-knowledge — what this evidence is and how it's collected — so it ships with the fetcher and is the shipped default the runner carries into the envelope. Customers override reference_id per program in the uploader config; they never edit this. Do NOT add controls/solution_capabilities here — that linkage stays Paramify-side. See docs/uploader_design.md.",
+      "description": "Paramify evidence-set identity for this fetcher (1 fetcher = 1 evidence set). Fetcher-knowledge — what this evidence is and how it's collected — so it ships with the fetcher and is the shipped default the runner carries into the envelope. Customers override reference_id per program in the uploader config; they never edit this. Do NOT add controls/solution_capabilities here — that linkage stays Paramify-side. See docs/uploader_guide.md.",
       "required": ["reference_id", "name"],
       "properties": {
         "reference_id": {

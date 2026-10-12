@@ -440,8 +440,8 @@ script's `description` and the `fetcher.yaml` `version`, with a sha256 drift gua
 uploader it talks Paramify REST v0 over HTTPS only and reads
 `PARAMIFY_UPLOAD_API_TOKEN`. See
 [`uploaders/paramify_scripts/README.md`](uploaders/paramify_scripts/README.md) for
-the full model, or [`docs/uploader_design.md`](docs/uploader_design.md) for how it
-fits alongside evidence upload.
+the full model, or [`docs/uploader_guide.md`](docs/uploader_guide.md#5-sync-scripts-and-validators-optional)
+for how it fits alongside evidence upload.
 
 ---
 
