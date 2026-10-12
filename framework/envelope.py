@@ -46,7 +46,7 @@ def build_metadata(result: InvocationResult, fetcher: Fetcher, run_id: str) -> d
         # heuristic — it assumes the last thing logged is why the run failed, which
         # is false for any fetcher whose final log line is an INFO message — so it
         # is the second choice, not the first. The payload is never consulted: it
-        # is fetcher-shaped and unredacted. See docs/fetcher_contract.md.
+        # is fetcher-shaped and unredacted. See docs/fetcher_contract_guide.md, step 4.
         error = result.error or (result.stderr[-_ERROR_TAIL_CHARS:] if result.stderr else None)
         if error:
             meta["error"] = error
