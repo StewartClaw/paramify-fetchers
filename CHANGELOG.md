@@ -306,7 +306,7 @@ schemas and the `paramify` CLI — not the internal code.
   `evidence_sets` list of `reference_id`s, so a validator that applies to four
   fetchers is one file naming four sets rather than four copies drifting apart.
   A fetcher's validators are the reverse lookup on its `evidence_set.reference_id`.
-  See [`docs/validators_design.md`](docs/validators_design.md).
+  See [`docs/validators_guide.md`](docs/validators_guide.md).
 - **Validator sync** — `paramify validators sync` and `paramify upload
   --with-validators` (engine in `uploaders/paramify_validators/`). Pushes registry
   validators to Paramify (`POST /validators`) and CONNECTs each to its evidence

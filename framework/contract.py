@@ -102,7 +102,7 @@ class Validator:
     it applies to via `evidence_sets` (reference_ids). `key` is the stable
     repo-side identity; the Paramify id is resolved per instance at sync time and
     never stored here. See framework/schemas/validator_schema.json and
-    docs/validators_design.md.
+    docs/validators_guide.md.
     """
     key: str
     name: str

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sync validators from the central registry to Paramify and associate them.
 
-A separate stage from evidence upload (per docs/validators_design.md): it reads
+A separate stage from evidence upload (docs/validators_guide.md, step 6): it reads
 the `validators/` registry, scopes to the validators whose `evidence_sets`
 intersect the sets a manifest produces, and for each one:
 
