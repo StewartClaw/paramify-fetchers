@@ -14,6 +14,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR.parent / "_shared"))
 from azure_common import (  # noqa: E402
     NOT_REGISTERED,
+    PLATFORM_SUBNET_NAMES,
     REGISTRATION_UNKNOWN,
     Collector,
     arm_client_kwargs,
@@ -38,13 +39,6 @@ logger = logging.getLogger("azure_vnet_egress_routing")
 
 DEFAULT_ROUTE = ipaddress.ip_network("0.0.0.0/0")
 APPLIANCE_HOPS = ("VirtualAppliance", "VirtualApplianceEcmp")
-PLATFORM_SUBNETS = {
-    "gatewaysubnet",
-    "azurebastionsubnet",
-    "azurefirewallsubnet",
-    "azurefirewallmanagementsubnet",
-    "routeserversubnet",
-}
 SUBNET_EGRESS_PATHS = (
     "appliance", "blackhole", "gateway", "nat_gateway", "default_outbound", "none", "other",
     "virtual_hub_unresolved", "platform_managed",
@@ -269,7 +263,7 @@ def appliance_owner(ips: list, owners_by_ip: dict) -> str:
 
 
 def subnet_egress_path(subnet: dict, vnet: dict, route) -> str:
-    if (subnet.get("name") or "").lower() in PLATFORM_SUBNETS:
+    if (subnet.get("name") or "").lower() in PLATFORM_SUBNET_NAMES:
         return "platform_managed"
     hop = route.get("next_hop_type") if route else "Internet"
     if hop in APPLIANCE_HOPS:

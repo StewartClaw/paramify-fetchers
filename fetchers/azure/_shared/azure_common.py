@@ -65,6 +65,16 @@ def arm_id_key(resource_id: Optional[str]) -> str:
     return str(resource_id or "").lower()
 
 
+# Subnets Azure itself routes and filters; their names are reserved, compared lower-cased.
+PLATFORM_SUBNET_NAMES = frozenset({
+    "gatewaysubnet",
+    "azurebastionsubnet",
+    "azurefirewallsubnet",
+    "azurefirewallmanagementsubnet",
+    "routeserversubnet",
+})
+
+
 def vnet_id_of(subnet_id: Optional[str]) -> str:
     """Lower-cased VNet id from a subnet (or subnet child) id; empty when there is none."""
     key = arm_id_key(subnet_id)

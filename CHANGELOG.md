@@ -463,6 +463,17 @@ schemas and the `paramify` CLI — not the internal code.
 
 ### Changed
 
+- **`azure_network_security_groups` 0.3.0: east-west segmentation.** Each workload
+  subnet now says which other subnets in its VNet can reach it on every port
+  (`east_west_segmentation`: `segmented`, `partial`, `unsegmented`, `undetermined`
+  or `no_peer_subnets`, with the subnets named on each side). Both subnets' NSGs
+  are walked in priority order, default rules included, so a VNet relying on the
+  platform's AllowVnetInBound reads `unsegmented`. An allow scoped to an
+  application security group, or an NSG in another subscription, gives
+  `undetermined` rather than a guess. Platform subnets are left out. Subnets gain
+  `address_prefixes` and `platform_subnet`, and rules gain their application
+  security group ids. NIC-level NSGs, traffic within a subnet and peered VNets are
+  not considered.
 - **The TUI keeps evidence and scan reports apart.** The catalog and the
   add-fetcher picker group by kind first (**Evidence**, **Scan reports**) and
   platform second, so a platform that ships both, like Wiz, no longer lists

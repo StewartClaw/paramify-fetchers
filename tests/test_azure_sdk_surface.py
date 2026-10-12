@@ -1246,6 +1246,22 @@ REQUIRED_MODEL_FIELDS: list[tuple[str, str, list[str], str]] = [
         "priority order against their destination",
     ),
     (
+        "azure.mgmt.network.models",
+        "SecurityRulePropertiesFormat",
+        ["source_address_prefix", "source_address_prefixes", "destination_port_range",
+         "destination_port_ranges", "protocol", "access", "direction",
+         "source_application_security_groups", "destination_application_security_groups"],
+        "azure/network_security_groups — east-west pairs; a renamed ASG field reads "
+        "an ASG-scoped allow as a plain one and claims segmentation it cannot see",
+    ),
+    (
+        "azure.mgmt.network.models",
+        "SubnetPropertiesFormat",
+        ["network_security_group", "address_prefix", "address_prefixes"],
+        "azure/network_security_groups — a subnet's NSG and range decide its east-west "
+        "verdict; a renamed NSG field reads as 'no NSG, unfiltered'",
+    ),
+    (
         "azure.mgmt.redis.models",
         "RedisResource",
         [
