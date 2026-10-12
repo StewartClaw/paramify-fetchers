@@ -535,7 +535,7 @@ design (peering connections and endpoints are omitted above for brevity).
 > structured exit-code categories (still binary `0`/`1`, plus `124` for a runner
 > timeout-kill) are not built yet. Issue-report collection is built end to end —
 > contract, runner, uploader, template — and Wiz ships the first three vendor
-> fetchers in that category. See `docs/design.md` for what's deferred.
+> fetchers in that category.
 
 ---
 
@@ -613,7 +613,6 @@ To add evidence collection for a new control or a new tool, see [`docs/authoring
 | [`docs/ksi_mapping.md`](docs/ksi_mapping.md) | Which fetchers map to which FedRAMP KSIs, per indicator and per fetcher, plus open gaps |
 | [`docs/run_manifest_reference.md`](docs/run_manifest_reference.md) | Manifest format reference |
 | [`docs/config_injection_design.md`](docs/config_injection_design.md) | Platform/config/auth model |
-| [`docs/design.md`](docs/design.md) | Why the framework is shaped this way + current state of the work |
 | [`docs/architecture_guide.md`](docs/architecture_guide.md) | Follow one run through the framework: `describe` → manifest → run → the evidence on disk → upload → verify in Paramify |
 | [`docs/versioning.md`](docs/versioning.md) | How we version, the contract, and what 1.0 means |
 | [`docs/releasing.md`](docs/releasing.md) | How a release is cut |

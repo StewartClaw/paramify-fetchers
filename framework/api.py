@@ -945,7 +945,7 @@ def validate(manifest: dict, root: Path, fetchers=None, platforms=None) -> List[
         # intaken, so the gap is reported here rather than at upload time — after
         # someone has already paid for a scan. It is deliberately NOT a required
         # config field: making it one would block collecting without a Paramify
-        # connection, which the framework is supposed to allow (docs/design.md).
+        # connection, which the framework is supposed to allow (docs/architecture_guide.md, step 3).
         if fetcher.is_issue_report:
             from framework.runner.executor import merged_config  # lazy: import cycle
 
