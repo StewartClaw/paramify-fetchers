@@ -2194,6 +2194,64 @@ def test_cdn_client_honours_pinned_api_version() -> None:
     )
 
 
+def test_arm_rest_requests_absolute_urls() -> None:
+    """ARMPipelineClient.send_request sends a relative path as given; the auth policy then refuses it as non-https."""
+    import sys
+    from pathlib import Path
+
+    from azure.core.pipeline.transport import HttpTransport
+    from azure.mgmt.core import ARMPipelineClient
+
+    shared = Path(__file__).resolve().parent.parent / "fetchers" / "azure" / "_shared"
+    sys.path[:0] = [str(shared.parent.parent / "_lib"), str(shared)]
+    import arm_rest
+
+    class _Response:
+        status_code = 200
+
+        def __init__(self, body):
+            self._body = body
+
+        def read(self):
+            return b""
+
+        def close(self):
+            pass
+
+        def json(self):
+            return self._body
+
+    class _Transport(HttpTransport):
+        def __init__(self, pages):
+            self.pages, self.urls = list(pages), []
+
+        def send(self, request, **kwargs):
+            self.urls.append(request.url)
+            return _Response(self.pages.pop(0))
+
+        def open(self):
+            pass
+
+        def close(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    next_link = "https://management.azure.com/subscriptions/s/next?api-version=1&$skiptoken=a"
+    transport = _Transport([{"value": [1], "nextLink": next_link}, {"value": [2]}])
+    client = ARMPipelineClient(base_url="https://management.azure.com", policies=[], transport=transport)
+
+    assert arm_rest.list_all(client, "/subscriptions/s/providers/P/things", "1") == {"items": [1, 2], "pages": 2}
+    assert transport.urls == [
+        "https://management.azure.com/subscriptions/s/providers/P/things?api-version=1",
+        next_link,
+    ], "affected fetchers: azure/alert_rules, azure/activity_log_alerts"
+
+
 # ---------------------------------------------------------------------------
 # Microsoft Graph
 # ---------------------------------------------------------------------------

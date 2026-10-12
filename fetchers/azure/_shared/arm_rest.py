@@ -35,7 +35,8 @@ def get_json(client, url: str) -> Dict[str, Any]:
     from azure.core.rest import HttpRequest
     from azure.mgmt.core.exceptions import ARMErrorFormat
 
-    response = client.send_request(HttpRequest("GET", url))
+    # send_request does not resolve a relative path against base_url; nextLinks are already absolute.
+    response = client.send_request(HttpRequest("GET", client.format_url(url)))
     if response.status_code >= 400:
         raise HttpResponseError(response=response, error_format=ARMErrorFormat)
     return response.json()
