@@ -83,7 +83,7 @@ it ([associate the evidence set](https://support.paramify.com/hc/en-us/articles/
 ## 5. Declare a fetcher's KSIs
 
 If you write fetchers, list the indicators the evidence plainly shows under
-`ksis` in `fetcher.yaml` ([the field](fetcher_contract.md#optional)), using IDs
+`ksis` in `fetcher.yaml` ([the field's schema](../framework/schemas/fetcher_schema.json)), using IDs
 from [the KSI reference](../framework/reference/ksis.yaml):
 
 ```yaml
