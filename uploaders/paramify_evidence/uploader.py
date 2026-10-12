@@ -5,7 +5,7 @@ A separate stage (per docs/design.md): reads a completed `run-<timestamp>/`
 directory of envelope-wrapped evidence files and pushes each to Paramify as an
 artifact on its evidence set. It reads nothing from fetcher source and needs only
 the run directory plus a Paramify API token, so it can be pointed at an old run to
-re-upload. See docs/uploader_design.md.
+re-upload. See docs/uploader_guide.md.
 
 Per evidence file the uploader:
   1. reads the envelope `metadata.evidence_set` (skips with a warning if absent),

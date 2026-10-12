@@ -294,7 +294,7 @@ schemas and the `paramify` CLI — not the internal code.
   uploads unchanneled exactly as before. A set with more than one channel errors
   that file rather than guessing, until the rules for choosing exist. The channel
   is recorded per file in `upload_log.json`, since the API does not report it back
-  on an artifact. See [`docs/uploader_design.md`](docs/uploader_design.md).
+  on an artifact. See [`docs/uploader_guide.md`](docs/uploader_guide.md).
 - **A default uploader config at `./upload.yaml`.** Every upload stage falls back
   to it when no `--config` is given, which is how the TUI — which passes no path —
   reaches base_url and the per-fetcher overrides at all. Both front-ends now name
@@ -1308,7 +1308,7 @@ schemas and the `paramify` CLI — not the internal code.
   `--reassociate` / `--json`. Backed by the `uploaders/paramify_scripts/` uploader.
   Only `SCRIPT` associations are automated; control / solution-capability / validator
   linkage stays Paramify-side.
-- [`docs/uploader_design.md`](docs/uploader_design.md) — a dedicated uploader design
+- [`docs/uploader_design.md`](https://github.com/paramify/paramify-fetchers/blob/v0.3.0-beta/docs/uploader_design.md) — a dedicated uploader design
   doc covering both built uploaders and the shared evidence-set identity model, and
   a README section + docs-table entries pointing to it.
 

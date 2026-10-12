@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sync fetcher entry scripts to Paramify and associate them to evidence sets.
 
-A provisioning stage, separate from evidence upload (see docs/uploader_design.md):
+A provisioning stage, separate from evidence upload (see docs/uploader_guide.md, step 5):
 evidence upload runs every collection; this runs only when `fetchers/**` changes.
 It reconciles the tenant to the repo — GitOps style — because the Paramify
 `/scripts` API has no stable external key and no server-side versioning:
