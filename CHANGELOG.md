@@ -803,7 +803,7 @@ schemas and the `paramify` CLI — not the internal code.
   [`fetchers/_lib/status.sh`](fetchers/_lib/status.sh) and
   [`fetchers/_lib/fetcher_status.py`](fetchers/_lib/fetcher_status.py), both
   named `report_failure` — and
-  [`docs/fetcher_contract.md`](docs/fetcher_contract.md) mandates it. It logs
+  [`docs/fetcher_contract.md`](https://github.com/paramify/paramify-fetchers/blob/v0.5.0-beta/docs/fetcher_contract.md) mandates it. It logs
   *and* reports, so it is the whole failure path; logging inside the helper is
   what guarantees the reason is the last line on stderr, which is what the
   fallback reads. The same nine-line status write previously existed as **27

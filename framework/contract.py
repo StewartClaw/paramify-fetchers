@@ -280,6 +280,6 @@ class InvocationResult:
     # What the fetcher reported via $FETCHER_STATUS_FILE, already secret-redacted
     # by the executor (the only place the injected values are still in scope).
     # None when the fetcher wrote nothing readable, which is not an error — the
-    # envelope then falls back to the stderr tail. See docs/fetcher_contract.md.
+    # envelope then falls back to the stderr tail. See docs/fetcher_contract_guide.md, step 4.
     error: Optional[str] = None
     error_code: Optional[str] = None
