@@ -5,7 +5,7 @@ A release is a tag plus a GitHub Release, cut by hand. The pictures cut
 
 ![Flow: choose the version and edit the changelog, merge a release PR and tag its merge commit, then create the GitHub Release and check it](img/releasing/flow.svg)
 
-**You need:** push access · [green CI](https://github.com/paramify/paramify-fetchers/actions) on `main` · a version from the [bump policy](versioning.md#bump-policy)
+**You need:** push access · [green CI](https://github.com/paramify/paramify-fetchers/actions) on `main` · a version from the [versioning guide's bump table](versioning_guide.md#2-read-what-changed)
 
 ---
 
@@ -29,8 +29,7 @@ git status --short --branch
 In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - <today>`, add a fresh one above it,
 repoint the bottom links, and bump `pyproject.toml`. **Every release so far is
 a pre-release** (`v0.5.1-beta`). If this one is too, write `X.Y.Z-beta`
-everywhere but `pyproject.toml`, and add `--prerelease` in step 5
-([pre-releases](releasing.md#pre-releases)).
+everywhere but `pyproject.toml`, and add `--prerelease` in step 5.
 
 ![git diff: a 0.6.0 heading under a fresh Unreleased heading, the Unreleased link moved to v0.6.0 plus a new 0.6.0 link, and the pyproject version bumped](img/releasing/02-diff.png)
 
@@ -110,7 +109,3 @@ gh release view vX.Y.Z
 | Symptom | Fix |
 |---|---|
 | The notes preview prints nothing | Match the `sed` pattern to the heading, including any `-beta`. |
-
-**More detail:** [what a release doesn't touch](releasing.md#what-a-release-does-not-touch) ·
-[release artifacts](releasing.md#artifacts) ·
-[future automation](releasing.md#future-automation)
