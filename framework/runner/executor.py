@@ -34,7 +34,7 @@ from framework.contract import (
     TargetInstance,
     effective_secrets,
 )
-from framework.discovery_report import DISCOVERY_DIR
+from framework.discovery import DISCOVERY_DIR
 from framework.issue_reports import ISSUE_REPORTS_DIR
 from framework.secret_resolver import SecretResolutionError, UnsetSecretError, resolve
 

@@ -5,7 +5,7 @@ KnowBe4 — Discovery
 Lists what this API key can see in the tenant: the account, groups, training
 campaigns, purchased modules, policies, phishing campaigns and tests, plus user
 and enrollment counts. Writes a discovery document, not evidence; nothing here
-is uploaded. `paramify discovery render <run-dir>` turns it into a page.
+is uploaded.
 
 Every list call is a Reporting API collection endpoint, paged by cursor.
 KnowBe4 retires the `page` parameter in November 2026, so this never uses it.

@@ -3,8 +3,7 @@
 AWS — Discovery
 
 Lists what this identity can see in one AWS account. Writes a discovery
-document, not evidence; nothing here is uploaded. `paramify discovery render
-<run-dir>` turns it into a page.
+document, not evidence; nothing here is uploaded.
 
 Two layers:
 

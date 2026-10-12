@@ -59,7 +59,7 @@ and what most should stay.
 | Runner wraps output in the envelope | yes | yes, and checks the payload (`metadata.inventory`) | **no** | yes |
 | Identity block | `evidence_set` | `evidence_set` (required) | `issue_report` | none (`evidence_set`, `ksis`, `validators` rejected) |
 | `output.type` | `json`, `csv`, `html` | `json` | `csv`, `json`, `xml`, `nessus` | `json` ([`discovery_schema.json`](../framework/schemas/discovery_schema.json)) |
-| Uploaded by | `paramify upload` | `paramify upload`, only when complete | `paramify issues upload` | nothing; `paramify discovery render` makes a page |
+| Uploaded by | `paramify upload` | `paramify upload`, only when complete | `paramify issues upload` | nothing (the JSON is read directly) |
 
 An inventory fetcher is an evidence fetcher with two more clauses: its payload
 holds `data` (records, each with a unique, non-empty `unique_asset_identifier`)

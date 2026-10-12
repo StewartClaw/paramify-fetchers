@@ -169,7 +169,7 @@ class Resource:
     keeps every record out of the document — use it for anything about people,
     and for types too numerous to list. `summary` aggregates over all records
     (see `by`). `label` is the singular name a person reads ("EC2 instance");
-    without one the page cases the type name itself. `note` says how to read the
+    without one a reader falls back to the type name. `note` says how to read the
     count when the general rules would mislead.
     """
 

@@ -9,7 +9,6 @@ answer that from memory or by clicking through the vendor's console.
 
 ```bash
 paramify run manifests/knowbe4-discovery.yaml   # → run-<ts>/discovery/knowbe4_discovery.json
-paramify discovery render evidence/run-<ts>     # → run-<ts>/discovery/knowbe4_discovery.html
 ```
 
 ## Why it is a fetcher kind
@@ -31,8 +30,7 @@ because each of them promises an upload or a claim that will never happen.
 ## The document
 
 Every platform writes the same shape
-([`discovery_schema.json`](../framework/schemas/discovery_schema.json)), which
-is why one renderer is enough:
+([`discovery_schema.json`](../framework/schemas/discovery_schema.json)):
 
 ```json
 {
@@ -57,10 +55,9 @@ Four rules shape it.
 **A type that could not be read is never an empty list.** `status` is `ok`,
 `denied` (the credentials may not read it), `not_enabled` (the platform said the
 feature is off or unlicensed) or `error` (anything else, throttling included).
-`denied` and `error` are gaps: we could not tell, and the page lists them in
-red before any number. `not_enabled` is an answer, not a gap: the platform said
-the feature is off, so there is nothing of that type, and the page notes it
-without alarm. A listing that failed partway is `truncated`, and its count is a
+`denied` and `error` are gaps: we could not tell. `not_enabled` is an answer,
+not a gap: the platform said the feature is off, so there is nothing of that
+type. A listing that failed partway is `truncated`, and its count is a
 lower bound. "There are none" and "we could not
 tell" are different answers, and later features that decide which fetchers apply
 to a tenant depend on telling them apart.
@@ -79,9 +76,8 @@ region; Azure lists per subscription. Each entry carries a `scope`
 and readable in the rest says exactly that, instead of the whole type reading
 as denied or the denied region quietly counting as zero. A type listed once (a
 global service, a SaaS tenant) has no `scope`. Each (type, scope) pair appears
-once. The page folds the entries back into one section per type: the total
-counts only the scopes that were read and is shown as a lower bound (`≥ n`)
-when any were not, and a per-scope table names the gaps.
+once. Totals across scopes count only the scopes that were read, and are a
+lower bound when any were not.
 
 Exit codes follow the fetcher contract. An `error` on any type exits 1 with
 `partial_failure`, so a scheduled discovery that lost half its answers shows up
@@ -89,34 +85,11 @@ red. `denied` is an answer, not a failure, and exits 0. If the credentials
 cannot establish identity at all (a key that cannot read its own account), the
 run fails before writing anything.
 
-## The review page
+## Reading the output
 
-`paramify discovery render` turns each document into one self-contained HTML
-page (`--format md` adds a Markdown copy for pasting into a ticket or chat).
-Every platform gets the same page, laid out from the document alone:
-
-1. **Masthead:** the platform, who the credentials are, where discovery looked,
-   when, and which run and fetcher version produced it.
-2. **Verdict:** one sentence on whether every count can be trusted. When a type
-   was denied, errored or cut short, it is named here with the reason, before
-   any number.
-3. **At a glance:** a tile per resource type with its count. An unread type
-   shows `—` and its status, never `0`; a truncated or partly read one shows
-   `≥ n`.
-4. **A section per resource type:** its source call, any failure, a per-scope
-   status table when the type was listed in several places, a bar per summary
-   breakdown, and the items as a table you can filter, sort, and copy exact
-   names out of (the names a fetcher's config asks for). Past 2,000 rows the
-   table stops and says so; the JSON keeps everything.
-
-The page makes no network requests: the brand font, the platform logo
-(`fetchers/logos/<category>.*`), styles and script are all inline, so it opens
-the same inside an air-gapped boundary and can be attached to a ticket or sent
-as a file. It reads in full with scripting off, and prints.
-
-The template is `framework/assets/discovery_report.html`. A platform needs
-nothing here beyond a logo; a change to the page is a change for every
-platform at once.
+The document is JSON and is meant to be read as JSON for now: open it, or pipe it
+through `jq`. A designed review page is planned; until it ships there is no
+`paramify discovery` command.
 
 ## Writing one for a new platform
 

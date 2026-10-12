@@ -29,9 +29,8 @@ Three of the four fetchers measure *specific* groups and campaigns, so they need
 
 To find the exact titles to use, run `knowbe4_discovery`: it lists every group,
 training campaign, module, policy and phishing campaign the key can see, without
-any config, and `paramify discovery render` turns the result into a page you
-can filter and copy exact names from. It is
-never uploaded. Or ask the API directly:
+any config, so you can copy exact names from its JSON output. It is never
+uploaded. Or ask the API directly:
 
 ```bash
 curl -s -H "Authorization: Bearer $KNOWBE4_API_KEY" \

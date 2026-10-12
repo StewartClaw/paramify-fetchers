@@ -91,10 +91,7 @@ schemas and the `paramify` CLI — not the internal code.
 - **Discovery fetchers (`kind: discovery`)**, a fourth collection kind that
   lists what a platform's credentials can see instead of collecting evidence.
   The runner writes their output to `<run>/discovery/`, which neither uploader
-  reads, and `paramify discovery render <run-dir>` turns each document into a
-  self-contained HTML review page (or Markdown with `--format md`), one
-  template for every platform, with no network requests. Every platform writes
-  the same document
+  reads. Every platform writes the same JSON document
   (`framework/schemas/discovery_schema.json`). Each resource type says whether
   it could be read (`ok`, `denied`, `not_enabled`, `error`, or `truncated` with
   a lower-bound count), so a type that could not be read never looks like one

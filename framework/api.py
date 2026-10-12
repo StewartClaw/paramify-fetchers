@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import yaml
@@ -1970,16 +1970,6 @@ def read_evidence(path) -> dict:
             "payload": raw.get("payload"),
         }
     return {"enveloped": False, "schema_version": None, "metadata": {}, "payload": raw}
-
-
-def render_discovery(path, formats: Sequence[str] = ("html",)) -> List[dict]:
-    """Render the discovery documents at `path` (a run dir, its discovery/ dir, or
-    one file) to pages beside them, one per format (html, md). One record per
-    document: its path, the files written, and any schema errors. Raises
-    ValueError for a bad path or format."""
-    from framework.discovery_report import render_path
-
-    return render_path(Path(path), formats)
 
 
 def read_issue_report(path) -> dict:

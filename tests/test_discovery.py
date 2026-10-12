@@ -2,8 +2,8 @@
 
 The property every test here circles: a resource type that could not be read
 must never look like a resource type with nothing in it. "denied", "error" and
-"truncated" are answers of their own, and the document, the renderer and the
-fetcher's exit code all have to keep them apart from "ok, 0".
+"truncated" are answers of their own, and the document and the fetcher's exit
+code both have to keep them apart from "ok, 0".
 
 The KnowBe4 fetcher runs in-process against a fake HTTP session serving canned
 Reporting API pages (cursor-paged, as the live API is), so every request goes
@@ -25,17 +25,12 @@ from pathlib import Path
 import pytest
 import yaml
 from jsonschema import Draft202012Validator
-from typer.testing import CliRunner
 
-from framework.cli import app
 from framework.contract import Fetcher
-from framework.discovery_report import (
+from framework.discovery import (
     DISCOVERY_DIR,
     find_documents,
     load,
-    render_html,
-    render_markdown,
-    render_path,
     validate,
 )
 from framework.runner.executor import invocation_dir
@@ -148,79 +143,10 @@ def test_an_unknown_status_is_rejected():
 
 
 # --------------------------------------------------------------------------- #
-# The rendered page
+# Finding documents in a run
 # --------------------------------------------------------------------------- #
 
-def test_the_page_never_shows_an_unreadable_type_as_zero():
-    md = render_markdown(_doc(OK_GROUP, DENIED, TRUNCATED))
-    assert "| phishing_campaign | denied | — |" in md
-    assert "| user | error (truncated) | ≥ 500 |" in md
-    assert "unknown**, not empty" in md
-
-
-def test_the_page_escapes_tenant_text():
-    md = render_markdown(_doc(OK_GROUP))
-    assert "Ops \\| FedRAMP" in md
-
-
-def test_a_count_only_type_says_so():
-    md = render_markdown(_doc({**OK_GROUP, "items": None}))
-    assert "_Count only" in md
-
-
-def test_a_failed_run_is_flagged_on_the_page():
-    md = render_markdown(_doc(OK_GROUP), {"exit_code": 1, "error": "throttled", "run_id": "r"})
-    assert "The discovery run failed (exit 1)" in md
-
-
-# The HTML review page is the artifact a person reads, and the same template
-# serves every platform, so these assert on its contract rather than its look.
-
-def test_the_html_page_makes_no_network_requests():
-    """It must open the same inside an air-gapped boundary: fonts, logo, styles
-    and script are all inline."""
-    page = render_html(_doc(OK_GROUP, DENIED, TRUNCATED))
-    for needle in ('src="http', "src='http", 'href="http', "url(http", "@import", "<link"):
-        assert needle not in page
-
-
-def test_the_html_page_escapes_tenant_text():
-    hostile = {**OK_GROUP, "items": [{"id": "1", "name": '<script>alert("x")</script>'}]}
-    page = render_html(_doc(hostile))
-    assert '<script>alert("x")</script>' not in page
-    assert "&lt;script&gt;" in page
-
-
-def test_the_html_page_never_shows_an_unreadable_type_as_zero():
-    page = render_html(_doc(OK_GROUP, DENIED, TRUNCATED))
-    assert "2 of 3 resource types could not be fully read" in page
-    assert '<span class="num">—</span><span class="label">Phishing campaigns</span>' in page
-    assert '<span class="num">≥ 500</span>' in page
-    assert "This type is unknown, not empty." in page
-    assert "the count is a lower bound" in page
-
-
-def test_the_html_page_lists_items_but_only_counts_people():
-    page = render_html(_doc(OK_GROUP, {**OK_GROUP, "type": "user", "items": None}))
-    assert '<td class="name" data-v="Eng">Eng</td>' in page
-    assert "Counted, not listed" in page
-
-
-def test_any_platform_renders_with_the_same_template():
-    """No per-platform code: an unknown platform gets a title and no logo."""
-    page = render_html({**_doc(OK_GROUP), "platform": "made_up_tool"})
-    assert "<h1>Made Up Tool</h1>" in page
-    assert '<img src="data:' not in page
-
-
-def test_render_rejects_an_unknown_format(tmp_path):
-    good = tmp_path / "d.json"
-    good.write_text(json.dumps(_doc(OK_GROUP)))
-    with pytest.raises(ValueError, match="unknown format"):
-        render_path(good, ("pdf",))
-
-
-def test_render_reads_a_run_dir_and_unwraps_the_envelope(tmp_path):
+def test_documents_are_found_in_a_run_dir_and_unwrapped(tmp_path):
     run_dir = tmp_path / "run-x"
     (run_dir / DISCOVERY_DIR).mkdir(parents=True)
     doc_path = run_dir / DISCOVERY_DIR / "knowbe4_discovery.json"
@@ -232,35 +158,6 @@ def test_render_reads_a_run_dir_and_unwraps_the_envelope(tmp_path):
     assert find_documents(run_dir) == [doc_path]
     meta, doc = load(doc_path)
     assert meta["run_id"] == "r1" and doc["platform"] == "knowbe4"
-
-    [result] = render_path(run_dir, ("html", "md"))
-    assert result["errors"] == []
-    html_out, md_out = (Path(o) for o in result["outputs"])
-    assert html_out.suffix == ".html" and md_out.suffix == ".md"
-    assert "**Run:** r1" in md_out.read_text()
-    assert "r1" in html_out.read_text()
-
-
-def test_the_cli_renders_and_fails_on_an_invalid_document(tmp_path):
-    good = tmp_path / "good.json"
-    good.write_text(json.dumps(_doc(OK_GROUP)))
-    res = CliRunner().invoke(app, ["discovery", "render", str(good), "--json"])
-    assert res.exit_code == 0, res.output
-    assert json.loads(res.output)["ok"] is True
-    assert (tmp_path / "good.html").exists()
-    assert not (tmp_path / "good.md").exists()
-
-    res = CliRunner().invoke(app, ["discovery", "render", str(good), "--format", "md", "--json"])
-    assert res.exit_code == 0, res.output
-    assert (tmp_path / "good.md").exists()
-
-    res = CliRunner().invoke(app, ["discovery", "render", str(good), "--format", "pdf"])
-    assert res.exit_code == 1
-
-    bad = tmp_path / "bad.json"
-    bad.write_text(json.dumps(_doc({**OK_GROUP, "count": None})))
-    res = CliRunner().invoke(app, ["discovery", "render", str(bad), "--json"])
-    assert res.exit_code == 1
 
 
 # --------------------------------------------------------------------------- #
@@ -523,43 +420,6 @@ def test_the_same_type_and_scope_twice_is_rejected():
     assert any("duplicate entry" in e for e in errors)
 
 
-def test_scoped_entries_fold_into_one_view_per_type():
-    from framework.discovery_report import group_resources
-
-    [group] = group_resources(SCOPED)
-    assert group["status"] == "partial"
-    assert group["count"] == 2 and group["truncated"] is True  # a lower bound: eu-west-1 is unknown
-    assert [i["region"] for i in group["items"]] == ["us-east-2", "us-east-2"]
-    assert len(group["scopes"]) == 3
-
-
-def test_a_type_read_everywhere_is_complete():
-    from framework.discovery_report import group_resources
-
-    [group] = group_resources(SCOPED[:2])
-    assert (group["status"], group["count"], group["truncated"]) == ("ok", 2, False)
-
-
-def test_the_page_says_which_scopes_were_unread():
-    page = render_html(_doc(*SCOPED))
-    assert '<span class="num">≥ 2</span>' in page
-    assert "partly read" in page
-    assert "ok in 2, denied in 1 of 3 regions" in page
-    assert "Listed in 3 regions, 1 not fully read" in page
-    md = render_markdown(_doc(*SCOPED))
-    assert "| eu-west-1 | denied | — |" in md
-
-
-def test_a_huge_type_is_capped_on_the_page(monkeypatch):
-    import framework.discovery_report as dr
-
-    monkeypatch.setattr(dr, "HTML_MAX_ROWS", 3)
-    items = [{"id": str(i), "name": f"n{i}"} for i in range(10)]
-    page = render_html(_doc({**OK_GROUP, "count": 10, "items": items}))
-    assert page.count("<tr><td") == 3
-    assert "Showing the first 3 of 10" in page
-
-
 # --------------------------------------------------------------------------- #
 # The AWS fetcher, against a fake aws CLI
 # --------------------------------------------------------------------------- #
@@ -786,53 +646,9 @@ OFF = {"type": "securityhub_hub", "label": "Security Hub", "status": "not_enable
        "source": "aws securityhub describe-hub"}
 
 
-def test_a_feature_that_is_off_is_not_reported_as_unread():
-    page = render_html(_doc(OK_GROUP, OFF))
-    assert "were read in full" in page
-    assert "could not be fully read" not in page
-    assert 'Not enabled: <a href="#r-securityhub_hub">Security Hub</a>.' in page
-
-
-def test_off_in_some_regions_and_on_in_others_is_a_complete_count():
-    from framework.discovery_report import group_resources
-
-    entries = [
-        {**OFF, "scope": {"region": "eu-west-1"}},
-        {**OFF, "scope": {"region": "us-east-2"}, "status": "ok", "count": 1,
-         "items": [{"id": "arn:hub", "name": "arn:hub"}]},
-    ]
-    entries[1].pop("reason")
-    [group] = group_resources(entries)
-    assert (group["count"], group["truncated"]) == (1, False)
-    page = render_html(_doc(*entries))
-    assert "were read in full" in page
-    assert "partly enabled" in page
-
-
 # --------------------------------------------------------------------------- #
 # Reading names
 # --------------------------------------------------------------------------- #
-
-def test_types_read_as_words_a_person_would_use():
-    from framework.discovery_report import _label, _plural
-
-    assert _label("ec2_instance") == "EC2 instance"
-    assert _label("iam_role") == "IAM role"
-    assert _plural("WAF web ACL (CloudFront)", 2) == "WAF web ACLs (CloudFront)"
-    assert _plural("Policy", 3) == "Policies" and _plural("Policy", 1) == "Policy"
-
-
-def test_a_fetcher_label_wins_over_the_type_name():
-    page = render_html(_doc({**OK_GROUP, "label": "KnowBe4 group"}))
-    assert "<h3>KnowBe4 groups</h3>" in page
-
-
-def test_an_id_that_repeats_the_name_is_not_shown_twice():
-    same = {**OK_GROUP, "items": [{"id": "role-a", "name": "role-a"}, {"id": "role-b", "name": "role-b"}]}
-    page = render_html(_doc(same))
-    assert '<th scope="col">ID</th>' not in page
-    assert '<th scope="col">ID</th>' in render_html(_doc(OK_GROUP))
-
 
 def test_boolean_breakdowns_read_yes_and_no(monkeypatch):
     sys.path.insert(0, str(REPO_ROOT / "fetchers" / "_lib"))
@@ -843,9 +659,9 @@ def test_boolean_breakdowns_read_yes_and_no(monkeypatch):
     }
 
 
-def test_a_fetcher_note_replaces_a_generic_line_that_would_be_false():
-    """A region with no Resource Explorer index was not searched; the generic
-    "where it is off there is nothing of this type" would be a false claim."""
+def test_a_fetcher_note_is_valid_on_any_status():
+    """A fetcher can explain an entry (a region with no Resource Explorer index
+    was not searched), whatever the entry's status."""
     note = "Regions without an index were not searched."
     entries = [
         {"type": "resource_explorer_type", "scope": {"region": "us-east-1"}, "status": "not_enabled",
@@ -854,7 +670,3 @@ def test_a_fetcher_note_replaces_a_generic_line_that_would_be_false():
          "count": 0, "truncated": False, "items": [], "note": note, "source": "s"},
     ]
     assert validate(_doc(*entries)) == []
-    page = render_html(_doc(*entries))
-    assert note in page
-    assert "there is nothing of this type" not in page
-    assert "Listed in 2 regions, 1 not enabled" in page

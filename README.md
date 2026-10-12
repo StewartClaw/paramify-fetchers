@@ -431,7 +431,6 @@ to configure them.
 
 ```bash
 paramify run manifest.yaml                    # → run-<ts>/discovery/<fetcher>.json
-paramify discovery render evidence/run-<ts>   # → a self-contained HTML review page beside each document
 ```
 
 KnowBe4 and AWS have one today (`knowbe4_discovery`, `aws_discovery`). See [`docs/discovery.md`](docs/discovery.md).

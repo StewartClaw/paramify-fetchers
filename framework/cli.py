@@ -16,7 +16,6 @@ Read / discover:
   paramify manifests [--json]                  # discovered run manifests
   paramify runs [--output-dir DIR] [--json]    # past runs under an output dir
     paramify evidence <path> [--json]            # read one evidence file (or issue-report sidecar)
-  paramify discovery render <run-dir|file> [--format html|md] [--json]  # discovery documents -> review pages
   paramify upload [run-dir] [--dry-run] [--json]
 
 Paramify workspace (live lookups; needs PARAMIFY_API_TOKEN with read scope):
@@ -159,13 +158,6 @@ issues_app = typer.Typer(
     help="Send issue reports (scan results) into Paramify pipelines, and manage their jobs.",
 )
 app.add_typer(issues_app, name="issues")
-
-discovery_app = typer.Typer(
-    no_args_is_help=True,
-    context_settings=_HELP_OPTS,
-    help="Read what a discovery fetcher found in a platform (kind: discovery).",
-)
-app.add_typer(discovery_app, name="discovery")
 
 
 @app.callback()
@@ -1034,41 +1026,6 @@ def evidence_cmd(
     typer.echo(style.highlight_json(
         json.dumps(ev["payload"], indent=2, default=str, ensure_ascii=False)
     ))
-
-
-@discovery_app.command("render")
-def discovery_render_cmd(
-    path: str = typer.Argument(
-        ..., help="A run dir, its discovery/ dir, or one discovery JSON file"
-    ),
-    formats: List[str] = typer.Option(
-        ["html"], "--format", "-F",
-        help="html (the review page, default) or md; repeat for both",
-    ),
-    json_out: bool = typer.Option(False, "--json", help="Emit JSON"),
-):
-    """Render each discovery document to a review page beside it."""
-    try:
-        results = api.render_discovery(Path(path), formats)
-    except ValueError as e:
-        if json_out:
-            typer.echo(json.dumps({"ok": False, "errors": [str(e)]}, indent=2))
-        else:
-            _err(str(e))
-        raise typer.Exit(1)
-    ok = bool(results) and not any(r["errors"] for r in results)
-    if json_out:
-        typer.echo(json.dumps({"ok": ok, "documents": results}, indent=2))
-    elif not results:
-        _err(f"No discovery documents under {path}.")
-    else:
-        for r in results:
-            for out in r["outputs"]:
-                typer.echo(f"{style.dim('wrote')} {out}")
-            for err in r["errors"]:
-                typer.echo(f"  {style.dim('schema:')} {err}")
-    if not ok:
-        raise typer.Exit(1)
 
 
 # --------------------------------------------------------------------------- #
