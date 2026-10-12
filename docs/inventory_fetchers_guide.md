@@ -7,7 +7,7 @@ it, and a Paramify inventory pipeline turns each record into an Inventory item.
 
 **You need:** [the repo installed](../README.md#install) ·
 [an API key](../uploaders/paramify_evidence/README.md#paramify-api-key) ·
-an inventory fetcher (none ship yet: [copy the template](inventory_fetchers.md#writing-one)
+an inventory fetcher (none ship yet: [copy the template](../fetchers/_template_inventory/)
 or ask [your AI agent](../README.md#drive-it-with-an-ai-agent)). The example is
 `acme_asset_inventory`.
 
@@ -29,8 +29,7 @@ paramify run manifest.yaml
 ## 2. Check the records
 
 The runner's verdict must read `complete`: *true*. Each record under
-`payload.data` has a stable, unique ID
-([contract](inventory_fetchers.md#the-payload-contract)).
+`payload.data` has a stable, unique ID.
 
 ![paramify evidence: the inventory verdict shows 137 records and complete true, then the first record, keyed by its ARN](img/inventory_fetchers/02-records.png)
 
@@ -52,8 +51,7 @@ paramify upload
 ```
 </details>
 
-**A run that missed anything is never sent**
-([why](inventory_fetchers.md#why-it-is-all-or-nothing)), as here after a rate limit:
+**A run that missed anything is never sent**, as here after a rate limit:
 
 ![paramify upload --dry-run after a failed run: incomplete inventory not sent, skipped_failed=1](img/inventory_fetchers/04-incomplete.png)
 
@@ -88,7 +86,3 @@ Run and upload again, then open **Monitoring → Inventory**.
 | `it holds no records` | Check the credential's scope and any filters. |
 | The pipeline finds no records | Your uploader config sets `artifact_payload: payload`. Use data path `data`. |
 | A list field can't be mapped | Map its scalar copy, such as `primary_ip_address`. |
-
-**More detail:** [why all or nothing](inventory_fetchers.md#why-it-is-all-or-nothing) ·
-[payload contract](inventory_fetchers.md#the-payload-contract) ·
-[what the runner adds](inventory_fetchers.md#what-the-framework-adds)
