@@ -1431,7 +1431,7 @@ change before 1.0 (see [`docs/versioning.md`](docs/versioning.md)).
   evidence payload).
 - Versioning & contract policy ([`docs/versioning.md`](docs/versioning.md)), this
   changelog, and the manual release runbook
-  ([`docs/releasing.md`](docs/releasing.md)).
+  ([`docs/releasing.md`](https://github.com/paramify/paramify-fetchers/blob/v0.2.0-beta/docs/releasing.md)).
 
 ### Changed
 
