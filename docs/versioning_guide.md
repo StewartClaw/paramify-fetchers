@@ -6,7 +6,7 @@ and check your manifests still validate.
 ![Flow: fetch tags and name your version, read every changelog entry you cross and pick a target, then switch, reinstall, and validate each manifest](img/versioning/flow.svg)
 
 **You need:** [a clone installed from source](../README.md#install). Private
-copy? [Merge the tag](private_mirror_workflow.md#3-pull-in-paramify-releases)
+copy? [Merge each release](private_mirror_guide.md#3-merge-each-paramify-release)
 instead. Container? [Build from the tag](../deploy/README.md#running-this-in-production).
 
 ---
@@ -40,13 +40,12 @@ git show v0.5.1-beta:CHANGELOG.md | grep -E '^## \[|^### (Breaking|Deprecated|Re
 ```
 </details>
 
-Here, `0.4.0-beta` made three KnowBe4 settings required. What each bump means
-([the contract](versioning.md#the-contract--the-public-api-surface)):
+Here, `0.4.0-beta` made three KnowBe4 settings required. What each bump means:
 
 | Bump | For you |
 |---|---|
 | Major | A manifest field, CLI flag, or fetcher output you use can break. |
-| Minor | New fetchers and options. **Before 1.0, a minor can also break** ([why](versioning.md#pre-10-and-the-meaning-of-10)). |
+| Minor | New fetchers and options. **Before 1.0, a minor can also break.** |
 | Patch | Fixes and dependency bumps. |
 
 ## 3. Switch, reinstall, validate
@@ -78,6 +77,5 @@ Set what it names as the entry says
 | `git describe` prints `v0.5.1-beta-291-g59a2387` | You're on `main`, 291 commits past it. Switch to a tag. |
 | A run breaks after upgrading | Switch back to your old tag, then reinstall. |
 
-**More detail:** [bump policy](versioning.md#bump-policy) ·
-[the three version axes](versioning.md#the-three-version-axes) ·
-[how releases are cut](releasing.md) · [CHANGELOG](../CHANGELOG.md)
+**More detail:** [how releases are cut](releasing_guide.md) ·
+[CHANGELOG](../CHANGELOG.md)
