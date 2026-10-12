@@ -306,7 +306,7 @@ schemas and the `paramify` CLI — not the internal code.
   `evidence_sets` list of `reference_id`s, so a validator that applies to four
   fetchers is one file naming four sets rather than four copies drifting apart.
   A fetcher's validators are the reverse lookup on its `evidence_set.reference_id`.
-  See [`docs/validators_design.md`](docs/validators_design.md).
+  See [`docs/validators_guide.md`](docs/validators_guide.md).
 - **Validator sync** — `paramify validators sync` and `paramify upload
   --with-validators` (engine in `uploaders/paramify_validators/`). Pushes registry
   validators to Paramify (`POST /validators`) and CONNECTs each to its evidence
@@ -803,7 +803,7 @@ schemas and the `paramify` CLI — not the internal code.
   [`fetchers/_lib/status.sh`](fetchers/_lib/status.sh) and
   [`fetchers/_lib/fetcher_status.py`](fetchers/_lib/fetcher_status.py), both
   named `report_failure` — and
-  [`docs/fetcher_contract.md`](docs/fetcher_contract.md) mandates it. It logs
+  [`docs/fetcher_contract.md`](https://github.com/paramify/paramify-fetchers/blob/v0.5.0-beta/docs/fetcher_contract.md) mandates it. It logs
   *and* reports, so it is the whole failure path; logging inside the helper is
   what guarantees the reason is the last line on stderr, which is what the
   fallback reads. The same nine-line status write previously existed as **27

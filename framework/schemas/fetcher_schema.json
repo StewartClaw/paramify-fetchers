@@ -154,7 +154,7 @@
     "validators": {
       "type": "array",
       "deprecated": true,
-      "description": "DEPRECATED — superseded by the central validators/ registry (validators/<category>/<key>.yaml, framework/schemas/validator_schema.json). Nothing in the framework reads this block; only gitlab/significant_change_notifications still carries one, and it is kept here so that fetcher's data stays shape-checked until it is migrated. Do not add new inline validators: author them in the registry, where a validator is a first-class object linked to fetchers by evidence_set.reference_id. See docs/validators_design.md.",
+      "description": "DEPRECATED — superseded by the central validators/ registry (validators/<category>/<key>.yaml, framework/schemas/validator_schema.json). Nothing in the framework reads this block; only gitlab/significant_change_notifications still carries one, and it is kept here so that fetcher's data stays shape-checked until it is migrated. Do not add new inline validators: author them in the registry, where a validator is a first-class object linked to fetchers by evidence_set.reference_id. See docs/validators_guide.md.",
       "items": {
         "type": "object",
         "required": ["id", "regex"],
