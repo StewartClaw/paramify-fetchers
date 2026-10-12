@@ -7,7 +7,7 @@ STIG benchmark, ...).
 
 This is an **issue-report** fetcher (`kind: issue_report`). It goes to an
 assessment's intake, not an evidence set. See
-[docs/issue_report_fetchers.md](../../../docs/issue_report_fetchers.md).
+[docs/issue_report_fetchers_guide.md](../../../docs/issue_report_fetchers_guide.md).
 
 ## Read-only, and why the CSV is assembled here
 

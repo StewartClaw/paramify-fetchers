@@ -18,7 +18,7 @@ restate them here.
 
 The golden rules below are for an **evidence** fetcher, the default and the
 common case. Phase 0 checks whether you're actually writing an issue report,
-which has its own contract in `docs/issue_report_fetchers.md`.
+which has its own guide in `docs/issue_report_fetchers_guide.md`.
 
 **Is this a whole new platform?** If nothing under `fetchers/` covers this tool
 yet and the goal is a slate rather than one fetcher, you want
@@ -61,7 +61,7 @@ this one cannot reach (Phase 4).
    state (MFA on, buckets encrypted)?
    - **Tool computes findings → ISSUE REPORT.** Copy
      `fetchers/_template_issue_report/` (not `_template/`) and follow
-     `docs/issue_report_fetchers.md` for the rest of the build. Shared parts
+     `docs/issue_report_fetchers_guide.md` for the rest of the build. Shared parts
      (secrets, categories, fanout, `$FETCHER_STATUS_FILE`) still apply from
      below — and if it fans out, the output filename must carry the target
      (keep the template's `target_suffix()`): all targets share one

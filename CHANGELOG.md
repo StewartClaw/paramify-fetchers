@@ -760,7 +760,7 @@ schemas and the `paramify` CLI — not the internal code.
   (`paramify assessments list` / `select`), the same way `paramify programs
   target` picks a program UUID without anyone typing one. Start from
   [`fetchers/_template_issue_report/`](fetchers/_template_issue_report/) and
-  [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md). Written
+  [`docs/issue_report_fetchers.md`](https://github.com/paramify/paramify-fetchers/blob/v0.5.0-beta/docs/issue_report_fetchers.md). Written
   against Paramify REST API v0 spec 0.6.0
   ([API documentation](https://app.paramify.com/api/documentation/)).
 

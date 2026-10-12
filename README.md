@@ -410,7 +410,7 @@ CSV/XML/JSON/Nessus structure, so anything added to it breaks the parse. That on
 constraint is what makes this a separate kind with a separate uploader instead of
 a flag on the existing one. Wiz ships the first three — STIG compliance, Issues
 report and vulnerability findings (see [`fetchers/wiz/README.md`](fetchers/wiz/README.md#issue-reports));
-to write another, start from [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md).
+to write another, start from [`docs/issue_report_fetchers_guide.md`](docs/issue_report_fetchers_guide.md).
 
 ### Inventory
 
@@ -577,7 +577,7 @@ Directories starting with `_` are not fetchers — the runner skips them.
 
 ## Adding a fetcher
 
-To add evidence collection for a new control or a new tool, see [`docs/authoring_a_fetcher.md`](docs/authoring_a_fetcher.md). If nothing covers that platform yet and you want a whole slate rather than one fetcher, start from [`docs/platform_onboarding.md`](docs/platform_onboarding.md). If the tool already produces the findings — a vulnerability scan or a CSPM export — you want an issue-report fetcher instead: [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md).
+To add evidence collection for a new control or a new tool, see [`docs/authoring_a_fetcher.md`](docs/authoring_a_fetcher.md). If nothing covers that platform yet and you want a whole slate rather than one fetcher, start from [`docs/platform_onboarding.md`](docs/platform_onboarding.md). If the tool already produces the findings — a vulnerability scan or a CSPM export — you want an issue-report fetcher instead: [`docs/issue_report_fetchers_guide.md`](docs/issue_report_fetchers_guide.md).
 
 ---
 
@@ -608,7 +608,6 @@ To add evidence collection for a new control or a new tool, see [`docs/authoring
 | [`docs/uploader_design.md`](docs/uploader_design.md) | How the three uploaders work + the shared evidence-set identity model |
 | [`docs/authoring_a_fetcher.md`](docs/authoring_a_fetcher.md) | Writing a new fetcher from scratch |
 | [`docs/platform_onboarding.md`](docs/platform_onboarding.md) | Onboarding a platform nobody has integrated yet — the claim, the sandbox, and the gates |
-| [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md) | The second kind of fetcher: raw scan reports → assessment issues |
 | [`docs/issue_report_fetchers_guide.md`](docs/issue_report_fetchers_guide.md) | Walkthrough: copy the template → declare it → stream the tool's bytes → run → check the report and its sidecar index |
 | [`docs/fetcher_contract.md`](docs/fetcher_contract.md) | The binding runner↔fetcher contract |
 | [`docs/ksi_mapping.md`](docs/ksi_mapping.md) | Which fetchers map to which FedRAMP KSIs, per indicator and per fetcher, plus open gaps |
