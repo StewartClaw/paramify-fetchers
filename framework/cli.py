@@ -67,7 +67,7 @@ scan files to <run>/issue-reports/ that `paramify issues upload` sends into the
 assessment's pipeline and processes. A run of both needs both commands. See
 docs/issue_report_fetchers.md. `kind: inventory` fetchers are evidence whose
 records an inventory pipeline turns into Inventory; `paramify upload` sends one
-only when the run collected all of it. See docs/inventory_fetchers.md.
+only when the run collected all of it. See docs/inventory_fetchers_guide.md.
 """
 
 from __future__ import annotations

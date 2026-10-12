@@ -420,7 +420,7 @@ instead of kept by hand. It uploads to an evidence set like any evidence, and an
 inventory pipeline attached to that set turns each record into an Inventory item.
 Because the pipeline reads the file as the whole estate, `paramify upload` sends
 an inventory only when the run collected all of it. See
-[`docs/inventory_fetchers.md`](docs/inventory_fetchers.md).
+[`docs/inventory_fetchers_guide.md`](docs/inventory_fetchers_guide.md).
 
 ### Show how evidence is generated (optional)
 

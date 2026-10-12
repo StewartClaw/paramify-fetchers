@@ -72,8 +72,8 @@ this one cannot reach (Phase 4).
      evidence file — skip it. The check for this kind is: after a real run, the
      file in `<run>/issue-reports/` is byte-identical to the tool's own export.
    - **Fetcher lists assets for Inventory → INVENTORY.** Copy
-     `fetchers/_template_inventory/` (not `_template/`) and read
-     `docs/inventory_fetchers.md`. It is an evidence fetcher with
+     `fetchers/_template_inventory/` (not `_template/`) and read its README
+     and `framework/schemas/inventory_schema.json`. It is an evidence fetcher with
      `kind: inventory`, a required `evidence_set`, and a payload of `data`
      (one record per asset, each with a unique `unique_asset_identifier`) plus
      `records_included`. All or nothing: any failed page or unreadable asset
