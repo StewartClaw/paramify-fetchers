@@ -23,7 +23,7 @@ Two things follow from the sidecar being the only channel:
 - The `_` prefix keeps it out of the uploader's own file set, the same convention
   `_run_metadata.json` uses.
 
-See docs/issue_report_fetchers.md.
+See docs/issue_report_fetchers_guide.md, step 5.
 """
 
 import hashlib

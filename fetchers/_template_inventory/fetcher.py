@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 # The shared failure-reporting helper. Import it, never paste a copy.
-# See docs/fetcher_contract.md § Output.
+# See docs/fetcher_contract_guide.md, step 6.
 sys.path.insert(0, str(SCRIPT_DIR.parents[1] / "_lib"))
 
 from fetcher_status import report_failure  # noqa: E402
