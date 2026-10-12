@@ -420,7 +420,7 @@ instead of kept by hand. It uploads to an evidence set like any evidence, and an
 inventory pipeline attached to that set turns each record into an Inventory item.
 Because the pipeline reads the file as the whole estate, `paramify upload` sends
 an inventory only when the run collected all of it. See
-[`docs/inventory_fetchers.md`](docs/inventory_fetchers.md).
+[`docs/inventory_fetchers_guide.md`](docs/inventory_fetchers_guide.md).
 
 ### See what a platform has (discovery)
 
@@ -624,7 +624,8 @@ To add evidence collection for a new control or a new tool, see [`docs/authoring
 | [`docs/authoring_a_fetcher.md`](docs/authoring_a_fetcher.md) | Writing a new fetcher from scratch |
 | [`docs/platform_onboarding_guide.md`](docs/platform_onboarding_guide.md) | End-to-end: `/onboard-platform` through its four gates → commit the fetchers → publish to Paramify |
 | [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md) | The second kind of fetcher: raw scan reports → assessment issues |
-| [`docs/fetcher_contract_guide.md`](docs/fetcher_contract_guide.md) | Checking one fetcher against the contract: discovery, declared env, a fake-credential run, the envelope, and the status file |
+| [`docs/inventory_fetchers_guide.md`](docs/inventory_fetchers_guide.md) | End-to-end: run an inventory fetcher → check its records → upload → set up the inventory pipeline in Paramify |
+| [`docs/fetcher_contract.md`](docs/fetcher_contract.md) | The binding runner↔fetcher contract |
 | [`docs/ksi_mapping.md`](docs/ksi_mapping.md) | Which fetchers map to which FedRAMP KSIs, per indicator and per fetcher, plus open gaps |
 | [`docs/ksi_mapping_guide.md`](docs/ksi_mapping_guide.md) | Finding the fetchers that cover a KSI with `paramify ksi`, reading covered / gap / organizational, and declaring a fetcher's `ksis` |
 | [`docs/run_manifest_reference.md`](docs/run_manifest_reference.md) | Manifest format reference |
