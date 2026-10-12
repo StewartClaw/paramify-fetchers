@@ -127,7 +127,7 @@ manifest, runs it, and reviews evidence — all without leaving the keyboard:
 **Sending scan reports** (Nessus, Wiz, STIG results and the like) into Paramify
 pipelines is its own short setup — a manifest for the scanners, an assessment and
 close policy for each, then send from the Paramify tab. The walkthrough, with
-recordings, is [`docs/pipelines.md`](docs/pipelines.md).
+recordings, is [`docs/pipelines_guide.md`](docs/pipelines_guide.md).
 
 > **Zero-credential first run:** the bundled `demo_hello` fetcher emits synthetic
 > evidence, so you can watch the whole collect → envelope pipeline before wiring
