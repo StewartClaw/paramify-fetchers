@@ -611,7 +611,6 @@ To add evidence collection for a new control or a new tool, see [`docs/authoring
 | [`docs/issue_report_fetchers.md`](docs/issue_report_fetchers.md) | The second kind of fetcher: raw scan reports → assessment issues |
 | [`docs/fetcher_contract.md`](docs/fetcher_contract.md) | The binding runner↔fetcher contract |
 | [`docs/ksi_mapping.md`](docs/ksi_mapping.md) | Which fetchers map to which FedRAMP KSIs, per indicator and per fetcher, plus open gaps |
-| [`docs/run_manifest_reference.md`](docs/run_manifest_reference.md) | Manifest format reference |
 | [`docs/run_manifest_guide.md`](docs/run_manifest_guide.md) | Step by step: `paramify manifest new` → add fetchers → close each gap (secrets, targets, shared config) → `validate` and `doctor` until it's runnable |
 | [`docs/config_injection_design.md`](docs/config_injection_design.md) | Platform/config/auth model |
 | [`docs/design.md`](docs/design.md) | Why the framework is shaped this way + current state of the work |
