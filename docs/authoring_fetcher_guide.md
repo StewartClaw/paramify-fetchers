@@ -5,7 +5,7 @@ This walks through one evidence fetcher from scratch:
 complexity, age, and lockout settings. You copy the template, fill in
 `fetcher.yaml` and `fetcher.py`, prove the wiring with fake credentials, then
 run it and read the evidence. Porting a script you already have? Use the
-[porting playbook](porting_playbook.md) instead.
+[porting guide](porting_guide.md) instead.
 
 **Or hand it to your AI agent:** the `create-fetcher` skill runs this flow
 from a short interview ([agent setup](../README.md#drive-it-with-an-ai-agent)).
@@ -14,16 +14,16 @@ from a short interview ([agent setup](../README.md#drive-it-with-an-ai-agent)).
 
 **You need:** [the repo installed](../README.md#install) · a read-only
 credential for the tool (here, an [Okta API token](../fetchers/okta/README.md)) ·
-an existing category, or [category setup](authoring_a_fetcher.md#per-category-setup-first-fetcher-in-a-new-category) first
+an existing category, or an empty `fetchers/_categories/<category>.yaml` to start one
 
 ---
 
 ## 1. Copy the template
 
-This guide builds an evidence fetcher, which asserts a state. For scan results
-or an asset list, [pick another kind](authoring_a_fetcher.md#which-kind-are-you-writing)
-and its template. Discovery finds the copy at once, under the template's
-placeholder name:
+This guide builds an evidence fetcher, which asserts a state. For scan results,
+follow the [issue-report guide](issue_report_fetchers_guide.md) instead; for an
+asset list, the [inventory guide](inventory_fetchers_guide.md). Discovery finds
+the copy at once, under the template's placeholder name:
 
 ![cp -r of the template into fetchers/okta/password_policy, ls showing its five entries, and paramify list showing the <category>_<short_name> placeholder](img/authoring_fetcher/01-scaffold.png)
 
@@ -40,9 +40,11 @@ paramify list
 
 Replace every placeholder. Declare one `secrets` entry per environment
 variable the fetcher reads: the runner drops any it doesn't know about
-([input contract](fetcher_contract.md#input)). **Add an `evidence_set` block**,
-which the template leaves out ([how upload uses it](uploader_design.md#the-evidence-set-identity-model-shared)).
-To run once per region or project, add [fanout](authoring_a_fetcher.md#fanout-when-one-fetcher-should-run-against-n-targets).
+([contract check](fetcher_contract_guide.md#2-it-reads-only-what-it-declares)).
+**Add an `evidence_set` block**, which the template leaves out
+([upload guide](uploader_guide.md)). To run once per region or project, set
+`supports_targets: true` and add a `target_schema`, as the
+[GitLab pipeline fetcher](../fetchers/gitlab/ci_cd_pipeline_config/fetcher.yaml) does.
 
 ```yaml
 name: okta_password_policy                # <category>_<short_name>, globally unique
@@ -91,9 +93,8 @@ paramify describe <category>_<short_name>
 Keep the template's shape. Read secrets from the environment, write a raw
 dict to `EVIDENCE_DIR` (the runner adds the envelope), and log one
 *Evidence saved* line. When a call fails, record it in the payload's
-`metadata`, call `report_failure`, and return 1
-([why](authoring_a_fetcher.md#detecting-collection-failures)). Bash works too
-([`fetcher.sh` notes](authoring_a_fetcher.md#fetchersh-bash)).
+`metadata`, call `report_failure`, and return 1. Bash works too:
+[Okta authenticators](../fetchers/okta/authenticators/fetcher.sh) is an example.
 
 <details><summary>The example's <code>fetcher.py</code></summary>
 
@@ -214,7 +215,7 @@ paramify run manifest.yaml
 
 The runner wrapped your dict. Its `metadata` holds the run status and your
 `evidence_set`, and `payload` is exactly what `fetcher.py` wrote
-([envelope fields](envelope_design.md#field-reference-metadata)). Check the
+([reading an envelope](envelope_guide.md#2-read-its-envelope)). Check the
 payload holds real values, not empty lists.
 
 ![paramify evidence showing metadata with status success and the EVD-OKTA-PASSWORD-POLICY evidence set, then the payload's first policy](img/authoring_fetcher/05-evidence.png)
@@ -255,14 +256,11 @@ file from step 5.
 
 | Symptom | Fix |
 |---|---|
-| `paramify list` fails with `schema validation failed` | Fix the field it names in `fetcher.yaml` ([required fields](fetcher_contract.md#required)). |
+| `paramify list` fails with `schema validation failed` | Fix the field it names in `fetcher.yaml` ([schema check](fetcher_contract_guide.md#1-it-passes-the-schema)). |
 | A direct run works, but `paramify run` shows `[FAIL]` and `_run_metadata.json` ends in `KeyError` | The fetcher reads a variable it doesn't declare. Add it under `secrets`. |
 | `Secret reference ${env:…} could not be resolved` | Export that variable where you run. `paramify doctor manifest.yaml` lists every missing one. |
 | The preview shows `[FAIL]` with `missing/incomplete evidence_set` | Add `evidence_set` with `reference_id` and `name` ([step 2](#2-fill-in-fetcheryaml)), then run again. |
-| A new category's fetcher hits `ImportError` or `command not found`, though `paramify doctor` was clean | List its tools and packages under `requires:` in `fetchers/_categories/<category>.yaml`. The category setup steps leave this out. |
+| A new category's fetcher hits `ImportError` or `command not found`, though `paramify doctor` was clean | List its tools and packages under `requires:` in `fetchers/_categories/<category>.yaml`, and add new packages to `requirements.txt`. |
 
-**More detail:** [authoring reference](authoring_a_fetcher.md) ·
-[what you don't need to do](authoring_a_fetcher.md#what-you-dont-need-to-do) ·
-[reference fetchers](authoring_a_fetcher.md#reference-fetchers) ·
-[fetcher contract](fetcher_contract.md) ·
+**More detail:** [contract checks](fetcher_contract_guide.md) ·
 [the create-fetcher skill](../.claude/skills/create-fetcher/SKILL.md)
