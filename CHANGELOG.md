@@ -12,6 +12,37 @@ schemas and the `paramify` CLI — not the internal code.
 
 ### Added
 
+- **`azure_vnet_egress_routing`** (`EVD-AZURE-VNET-EGRESS`) — where each subnet's
+  and network interface's Internet-bound traffic goes, as `egress_path`: an
+  appliance, a black hole, a gateway, a NAT gateway, or Azure's implicit default
+  outbound access (`default_outbound_access_effective` reads an unset subnet flag
+  as on). A default route split into halves (`0.0.0.0/1` + `128.0.0.0/1`) counts as
+  the default, and on a subnet whose default goes to an appliance or gateway every
+  route straight to the Internet is listed in `internet_bypass_routes`. An
+  appliance next hop is resolved to what holds it (`appliance_owner`): an Azure
+  Firewall, an IP-forwarding NIC, or something outside the subscription.
+  Subnets connected to a Virtual WAN hub with routing intent resolve to the hub's
+  firewall when the connection propagates the default route. Each subnet also lists
+  its own and its peers' address ranges that are not forced through the appliance.
+  Every route table says whether a subnet uses it, and every Azure Firewall carries
+  its tier, policy, effective threat-intelligence mode (the strictest along the
+  policy's parent chain) and the subnets routed through it. A spoke VNet is
+  recognised from its own peerings even when its hub is in a separate connectivity
+  subscription. The hub is then looked for in up to 50 other subscriptions the
+  credential can read (`VIRTUAL_HUB_SEARCH_MAX_SUBSCRIPTIONS`), keeping only that
+  hub's connections to this subscription's spokes; a spoke still not found reads
+  `virtual_hub_unresolved`, not `default_outbound`. Load balancer outbound rules are
+  not evaluated. Configured routes only:
+  effective routes need an action Reader does not have. Tested read-only against a
+  production subscription, where every count matched Resource Graph.
+- **`azure_ddos_protection`** (`EVD-AZURE-DDOS`) — every public IP, what holds it,
+  its virtual network and its `effective_protection`: `network_protection` (a DDoS
+  plan on the VNet), `ip_protection`, `none`, `disabled`, `not_supported` (NAT
+  gateway IPs, which DDoS Protection cannot cover), or `unknown` where the VNet
+  cannot be resolved. A public load balancer frontend takes its backend pools' VNet.
+  Also every DDoS
+  protection plan and the VNets that use it. Virtual WAN hub firewall addresses are
+  not public IP resources and are not listed.
 - **Default custom tags on everything the uploaders create.** Every evidence
   set, script and validator that `paramify upload`, `paramify scripts sync`
   and `paramify validators sync` create or maintain now carries two custom
@@ -440,6 +471,18 @@ schemas and the `paramify` CLI — not the internal code.
 
 ### Changed
 
+- **`azure_network_security_groups` 0.3.0: east-west segmentation.** Each workload
+  subnet now says which other subnets in its VNet can reach it on every port
+  (`east_west_segmentation`: `segmented`, `partial`, `unsegmented`, `undetermined`
+  or `no_peer_subnets`, with the subnets named on each side). Both subnets' NSGs
+  are walked in priority order, default rules included, so a VNet relying on the
+  platform's AllowVnetInBound reads `unsegmented`. An allow scoped to an
+  application security group, or an NSG in another subscription, gives
+  `undetermined` rather than a guess. A rule's port ranges are merged, so a deny
+  split across `0-1023` and `1024-65535` covers every port. Platform subnets are left out. Subnets gain
+  `address_prefixes` and `platform_subnet`, and rules gain their application
+  security group ids. NIC-level NSGs, traffic within a subnet and peered VNets are
+  not considered.
 - **The TUI keeps evidence and scan reports apart.** The catalog and the
   add-fetcher picker group by kind first (**Evidence**, **Scan reports**) and
   platform second, so a platform that ships both, like Wiz, no longer lists
