@@ -210,7 +210,8 @@ REQUIRED_SURFACE: list[tuple[str, str, str | None, list[Method], str]] = [
         "resource_groups",
         ["list"],
         "azure/vpn_gateway_configuration — VNet gateways, connections and local "
-        "gateways have no subscription-wide list",
+        "gateways have no subscription-wide list; azure/change_provenance — the "
+        "resource groups whose deployment history is read",
     ),
     # --- monitor: the PR #59 regression -------------------------------------
     (
@@ -874,7 +875,8 @@ REQUIRED_SURFACE: list[tuple[str, str, str | None, list[Method], str]] = [
         None,
         ["send_request"],
         "_shared/arm_rest — azure/alert_rules, azure/activity_log_alerts "
-        "(action groups, alert processing rules)",
+        "(action groups, alert processing rules), azure/residual_resources "
+        "(federated identity credentials)",
     ),
     # --- Resource Graph: the inventory query sits on the client itself --------
     (
@@ -883,7 +885,16 @@ REQUIRED_SURFACE: list[tuple[str, str, str | None, list[Method], str]] = [
         None,
         ["resources"],
         "azure/resource_inventory, azure/front_door_origins (origin regions), "
-        "azure/resource_diagnostic_settings",
+        "azure/resource_diagnostic_settings, azure/change_provenance, azure/residual_resources",
+    ),
+    # --- deployment history: left azure-mgmt-resource for its own distribution -
+    (
+        "azure.mgmt.resource.deployments",
+        "DeploymentsMgmtClient",
+        "deployments",
+        ["list_at_subscription_scope", "list_by_resource_group"],
+        "azure/change_provenance — without it no change can be attributed to a "
+        "deployment, so every change reads as a direct edit",
     ),
     # --- app platform --------------------------------------------------------
     (
@@ -1773,6 +1784,19 @@ REQUIRED_MODEL_FIELDS: list[tuple[str, str, list[str], str]] = [
         "loop and its completeness check",
     ),
     (
+        "msgraph.generated.directory_objects.get_by_ids.get_by_ids_post_request_body",
+        "GetByIdsPostRequestBody",
+        ["ids"],
+        "azure/residual_resources — the principal ids looked up in the directory",
+    ),
+    (
+        "azure.mgmt.resource.deployments.models",
+        "DeploymentPropertiesExtended",
+        ["correlation_id", "timestamp", "duration", "output_resources", "provisioning_state", "template_hash"],
+        "azure/change_provenance — correlation_id and output_resources are the two "
+        "joins from a change to the deployment that made it",
+    ),
+    (
         "azure.mgmt.loganalytics.models",
         "Workspace",
         ["properties"],
@@ -2499,7 +2523,7 @@ def test_arm_rest_requests_absolute_urls() -> None:
 # Microsoft Graph
 # ---------------------------------------------------------------------------
 GRAPH_BUILDERS = [
-    ("organization", "_shared/entra_graph — tenant name resolution"),
+    ("organization", "_shared/entra_graph — tenant name resolution; azure/residual_resources — tenant check"),
     ("applications", "azure/entra_app_registrations"),
     ("users", "azure/entra_mfa_status"),
     ("directory_roles", "azure/entra_privileged_roles"),
@@ -2509,6 +2533,7 @@ GRAPH_BUILDERS = [
     ("group_settings", "azure/entra_authentication_policy"),
     ("group_setting_templates", "azure/entra_authentication_policy"),
     ("subscribed_skus", "azure/entra_authentication_policy"),
+    ("directory_objects", "azure/residual_resources — getByIds; without it no deleted principal is found"),
 ]
 
 

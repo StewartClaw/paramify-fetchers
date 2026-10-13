@@ -476,6 +476,11 @@ def write_evidence(output_dir: Path, filename: str, evidence: Dict[str, Any]) ->
     return path
 
 
+def sorted_counts(counter) -> Dict[str, int]:
+    """A Counter as a plain dict in key order, so evidence diffs stay stable."""
+    return {key: counter[key] for key in sorted(counter)}
+
+
 def coverage_percentage(covered: int, total: int) -> int:
     """Integer percentage, matching the AWS/GCP fetchers' summary math (0 when empty)."""
     return (covered * 100) // total if total > 0 else 0
