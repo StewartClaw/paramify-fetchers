@@ -427,7 +427,7 @@ python tools/gen_ksi_mapping.py
 
 ## By fetcher
 
-229 of 237 fetchers carry a mapping.
+231 of 239 fetchers carry a mapping.
 
 ### aws  (80)
 
@@ -514,7 +514,7 @@ python tools/gen_ksi_mapping.py
 | [`aws_waf_all_rules`](../fetchers/aws/waf_all_rules) | `KSI-CNA-RVP` |
 | [`aws_waf_dos_rules`](../fetchers/aws/waf_dos_rules) | `KSI-CNA-RVP` |
 
-### azure  (58)
+### azure  (60)
 
 | Fetcher | Indicators |
 |---|---|
