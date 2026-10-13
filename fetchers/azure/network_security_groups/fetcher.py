@@ -33,11 +33,11 @@ from azure_common import (  # noqa: E402
     failure_reason,
     model_attr,
     provider_registration_status,
+    report_failure,
     resolve_subscription,
     resource_group_from_id,
     sanitize_for_filename,
     write_evidence,
-    report_failure,
 )
 
 logger = logging.getLogger("azure_network_security_groups")

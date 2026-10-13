@@ -16,18 +16,18 @@ from azure_common import (  # noqa: E402
     Collector,
     arm_client_kwargs,
     arm_id_key,
-    vnet_id_of,
     build_payload,
     classify_failure_code,
     credential,
     failure_reason,
     model_attr,
     provider_registration_status,
+    report_failure,
     resolve_subscription,
     resource_group_from_id,
     sanitize_for_filename,
+    vnet_id_of,
     write_evidence,
-    report_failure,
 )
 
 logger = logging.getLogger("azure_ddos_protection")
