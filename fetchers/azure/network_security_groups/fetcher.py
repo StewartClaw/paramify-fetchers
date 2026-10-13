@@ -371,7 +371,6 @@ def rule_opens_port_to_internet(rule: dict, port: int) -> bool:
 
 # --- east-west: can one workload subnet reach another in its VNet on every port? ---
 
-ALL_PORTS = ("*", "0-65535")
 # Pairs are within one VNet, so the VirtualNetwork tag covers both ends.
 EVERY_SUBNET = ("*", "0.0.0.0/0", "VirtualNetwork")
 EAST_WEST_STATES = ("segmented", "partial", "unsegmented", "undetermined", "no_peer_subnets")
@@ -385,6 +384,27 @@ def _networks(values) -> list:
         except ValueError:
             pass
     return nets
+
+
+def _port_span(value):
+    text = str(value).strip()
+    if text == "*":
+        return 0, 65535
+    low, _, high = text.partition("-")
+    try:
+        return int(low), int(high or low)
+    except ValueError:
+        return None
+
+
+def covers_all_ports(values) -> bool:
+    """Do these destination port ranges, merged, cover every usable port (1-65535)?"""
+    reach = 0
+    for low, high in sorted(span for v in values if v and (span := _port_span(v))):
+        if low > reach + 1:
+            return False
+        reach = max(reach, high)
+    return reach >= 65535
 
 
 def prefix_coverage(rule_prefixes: list, subnet_prefixes: list) -> str:
@@ -413,7 +433,7 @@ def pair_access(group: dict, direction: str, source_prefixes: list, destination_
         key=lambda r: r["priority"] if isinstance(r.get("priority"), int) else 1 << 30,
     )
     for rule in rules:
-        all_ports = any(str(p).strip() in ALL_PORTS for p in _ports(rule) if p)
+        all_ports = covers_all_ports(_ports(rule))
         broad_allow = rule["access"] == "Allow" and all_ports and rule.get("protocol") in ANY_TCP_PROTOCOLS
         full_deny = rule["access"] == "Deny" and all_ports and rule.get("protocol") == "*"
         if not (broad_allow or full_deny):

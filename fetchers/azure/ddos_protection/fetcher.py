@@ -40,7 +40,7 @@ ATTACHMENT_TYPES = {
     "virtualnetworkgateways": "virtual_network_gateway",
     "applicationgateways": "application_gateway",
 }
-EFFECTIVE_PROTECTION = ("network_protection", "ip_protection", "none", "disabled", "unknown")
+EFFECTIVE_PROTECTION = ("network_protection", "ip_protection", "none", "disabled", "not_supported", "unknown")
 
 
 # --- projection: the only code here that touches an azure-mgmt model ---
@@ -100,6 +100,23 @@ def project_network_interface(nic) -> dict:
     }
 
 
+def project_load_balancer(lb) -> dict:
+    pools = model_attr(lb, "backend_address_pools") or []
+    addresses = [a for p in pools for a in (model_attr(p, "load_balancer_backend_addresses") or [])]
+    return {
+        "id": model_attr(lb, "id"),
+        "backend_ip_configuration_ids": [i for p in pools for i in _ids(model_attr(p, "backend_ip_configurations"))]
+        + [i for a in addresses if (i := model_attr(model_attr(a, "network_interface_ip_configuration"), "id"))],
+        "backend_virtual_network_ids": [
+            i for i in [
+                *(model_attr(model_attr(p, "virtual_network"), "id") for p in pools),
+                *(model_attr(model_attr(a, "virtual_network"), "id") for a in addresses),
+                *(vnet_id_of(model_attr(model_attr(a, "subnet"), "id")) for a in addresses),
+            ] if i
+        ],
+    }
+
+
 # --- pure transforms (flat snake_case dicts in, evidence records out) ---
 
 def resource_of(child_id):
@@ -122,11 +139,19 @@ def attachment(ip: dict):
     return "unattached", None
 
 
-def vnet_by_resource(vnets: list[dict], nics: list[dict]) -> dict:
-    """Lower-cased resource id -> lower-cased VNet id, from subnet back-references, then NIC subnets."""
-    index = {}
+def _nic_of(config_id) -> str:
+    """The NIC id of a NIC IP configuration id (VM or scale-set instance)."""
+    key = arm_id_key(config_id)
+    return key.rsplit("/ipconfigurations/", 1)[0] if "/networkinterfaces/" in key else ""
+
+
+def vnet_by_resource(vnets: list[dict], nics: list[dict], load_balancers: list[dict] = ()) -> dict:
+    """Lower-cased resource id -> lower-cased VNet id, from subnet back-references, NIC subnets, then a load
+    balancer's backend pools (whose IP configurations or addresses must all sit in one VNet)."""
+    index, by_config = {}, {}
     for vnet in vnets:
         for config_id in vnet.get("subnet_ip_configuration_ids") or []:
+            by_config[arm_id_key(config_id)] = arm_id_key(vnet["id"])
             _, resource_id = resource_of(config_id)
             if resource_id:
                 index.setdefault(arm_id_key(resource_id), arm_id_key(vnet["id"]))
@@ -134,6 +159,12 @@ def vnet_by_resource(vnets: list[dict], nics: list[dict]) -> dict:
         vnet_ids = {vnet_id_of(s) for s in nic.get("subnet_ids") or [] if vnet_id_of(s)}
         if len(vnet_ids) == 1:
             index.setdefault(arm_id_key(nic["id"]), vnet_ids.pop())
+    for lb in load_balancers:
+        backends = {arm_id_key(v) for v in lb.get("backend_virtual_network_ids") or []}
+        for config_id in lb.get("backend_ip_configuration_ids") or []:
+            backends.add(by_config.get(arm_id_key(config_id)) or index.get(_nic_of(config_id)))
+        if len(backends) == 1 and None not in backends:
+            index.setdefault(arm_id_key(lb["id"]), backends.pop())
     return index
 
 
@@ -142,6 +173,8 @@ def vnet_has_plan(vnet) -> bool:
 
 
 def effective_protection(ip: dict, attached_to: str, vnet) -> str:
+    if attached_to == "nat_gateway":
+        return "not_supported"
     mode = ip.get("protection_mode") or "VirtualNetworkInherited"
     if mode == "Enabled":
         return "ip_protection"
@@ -223,8 +256,10 @@ def summarize(plans: list[dict], vnets: list[dict], ips: list[dict]) -> dict:
     }
 
 
-def build_records(raw_plans: list[dict], raw_vnets: list[dict], raw_ips: list[dict], raw_nics: list[dict]):
-    resource_vnets = vnet_by_resource(raw_vnets, raw_nics)
+def build_records(
+    raw_plans: list[dict], raw_vnets: list[dict], raw_ips: list[dict], raw_nics: list[dict], raw_lbs: list[dict] = (),
+):
+    resource_vnets = vnet_by_resource(raw_vnets, raw_nics, raw_lbs)
     vnets_by_id = {arm_id_key(v["id"]): v for v in raw_vnets}
     ips = [public_ip_record(i, resource_vnets, vnets_by_id) for i in raw_ips]
     plan_ids = {arm_id_key(p["id"]) for p in raw_plans}
@@ -240,7 +275,7 @@ def build_records(raw_plans: list[dict], raw_vnets: list[dict], raw_ips: list[di
 # --- collection (lazy azure imports) ---
 
 def collect(subscription_id, cred, collector: Collector):
-    """DDoS protection plans, VNets with their subnets' back-references, public IPs and NICs."""
+    """DDoS protection plans, VNets with their subnets' back-references, public IPs, NICs and load balancers."""
     from azure.mgmt.network import NetworkManagementClient
 
     client = collector.guard(
@@ -250,7 +285,7 @@ def collect(subscription_id, cred, collector: Collector):
         ),
     )
     if client is None:
-        return [], [], [], []
+        return [], [], [], [], []
 
     plans = collector.guard(
         "network.ddos_protection_plans.list",
@@ -272,7 +307,12 @@ def collect(subscription_id, cred, collector: Collector):
         lambda: [project_network_interface(n) for n in client.network_interfaces.list_all()],
         default=[],
     )
-    return plans, vnets, ips, nics
+    lbs = collector.guard(
+        "network.load_balancers.list_all",
+        lambda: [project_load_balancer(lb) for lb in client.load_balancers.list_all()],
+        default=[],
+    )
+    return plans, vnets, ips, nics, lbs
 
 
 def main() -> int:
@@ -290,7 +330,7 @@ def main() -> int:
     subscription_id = sub["subscription_id"]
     cred = collector.guard("azure.identity.DefaultAzureCredential", credential)
 
-    raw = ([], [], [], [])
+    raw = ([], [], [], [], [])
     registration = REGISTRATION_UNKNOWN
     if subscription_id and cred is not None:
         registration = provider_registration_status(collector, subscription_id, cred, "Microsoft.Network")

@@ -323,6 +323,13 @@ REQUIRED_SURFACE: list[tuple[str, str, str | None, list[Method], str]] = [
         ["list_all"],
         "azure/ddos_protection — every Internet entry point",
     ),
+    (
+        "azure.mgmt.network",
+        "NetworkManagementClient",
+        "load_balancers",
+        ["list_all"],
+        "azure/ddos_protection — a public load balancer's backend VNet",
+    ),
     # --- Azure Cache for Redis (classic) ------------------------------------
     (
         "azure.mgmt.redis",
@@ -1260,6 +1267,30 @@ REQUIRED_MODEL_FIELDS: list[tuple[str, str, list[str], str]] = [
         ["network_security_group", "address_prefix", "address_prefixes"],
         "azure/network_security_groups — a subnet's NSG and range decide its east-west "
         "verdict; a renamed NSG field reads as 'no NSG, unfiltered'",
+    ),
+    (
+        "azure.mgmt.network.models",
+        "LoadBalancerPropertiesFormat",
+        ["backend_address_pools"],
+        "azure/ddos_protection — a renamed field reads every load balancer IP as 'unknown'",
+    ),
+    (
+        "azure.mgmt.network.models",
+        "BackendAddressPoolPropertiesFormat",
+        ["backend_ip_configurations", "load_balancer_backend_addresses", "virtual_network"],
+        "azure/ddos_protection — the backend pool's VNet decides a frontend IP's protection",
+    ),
+    (
+        "azure.mgmt.network.models",
+        "LoadBalancerBackendAddressPropertiesFormat",
+        ["virtual_network", "subnet", "network_interface_ip_configuration"],
+        "azure/ddos_protection — pools configured by IP address",
+    ),
+    (
+        "azure.mgmt.network.models",
+        "FirewallPolicyPropertiesFormat",
+        ["base_policy", "threat_intel_mode"],
+        "azure/vnet_egress_routing — a child policy's threat-intel mode is at least its parent's",
     ),
     (
         "azure.mgmt.redis.models",

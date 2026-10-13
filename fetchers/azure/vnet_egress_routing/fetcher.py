@@ -34,6 +34,7 @@ from azure_common import (  # noqa: E402
     vnet_id_of,
     write_evidence,
 )
+from azure_rest import int_config  # noqa: E402
 
 logger = logging.getLogger("azure_vnet_egress_routing")
 
@@ -48,6 +49,11 @@ HUB_PEER_VNET = re.compile(
     r"/virtualNetworks/HV_(.+)_[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$", re.IGNORECASE
 )
 NIC_EGRESS_PATHS = SUBNET_EGRESS_PATHS + ("public_ip", "mixed")
+# A route to Internet on a subnet whose default goes elsewhere sends that range around the default's path.
+BYPASSABLE_PATHS = ("appliance", "blackhole", "gateway", "other")
+THREAT_INTEL_STRICTNESS = {"Off": 0, "Alert": 1, "Deny": 2}
+SEARCH_LIMIT_ENV = "VIRTUAL_HUB_SEARCH_MAX_SUBSCRIPTIONS"
+DEFAULT_SEARCH_LIMIT = 50
 
 
 # --- projection: the only code here that touches an azure-mgmt model ---
@@ -226,7 +232,44 @@ def _network(prefix):
 
 
 def default_route(routes: list[dict]):
-    return next((r for r in routes if _network(r.get("address_prefix")) == DEFAULT_ROUTE), None)
+    """The route that carries 0.0.0.0/0, with the prefixes it is made of.
+
+    Routes of one next-hop kind that together cover 0.0.0.0/0 (0.0.0.0/1 + 128.0.0.0/1) are more specific than an
+    exact 0.0.0.0/0 route, so they win over it.
+    """
+    by_hop = {}
+    for route in routes:
+        net = _network(route.get("address_prefix"))
+        if net is not None and net.version == 4 and net.prefixlen:
+            hop = route.get("next_hop_type")
+            by_hop.setdefault("appliance" if hop in APPLIANCE_HOPS else hop, []).append((net, route))
+    for parts in by_hop.values():
+        nets = [net for net, _ in parts]
+        if list(ipaddress.collapse_addresses(nets)) != [DEFAULT_ROUTE]:
+            continue
+        top = sorted(
+            ((net, r) for net, r in parts if not any(net != other and net.subnet_of(other) for other in nets)),
+            key=lambda p: p[0],
+        )
+        return {
+            "name": "+".join(r.get("name") or "" for _, r in top),
+            "address_prefix": str(DEFAULT_ROUTE),
+            "next_hop_type": top[0][1].get("next_hop_type"),
+            "next_hop_ip_addresses": list(dict.fromkeys(ip for _, r in top for ip in r["next_hop_ip_addresses"])),
+            "address_prefixes": [r.get("address_prefix") for _, r in top],
+        }
+    exact = next((r for r in routes if _network(r.get("address_prefix")) == DEFAULT_ROUTE), None)
+    return {**exact, "address_prefixes": [exact.get("address_prefix")]} if exact else None
+
+
+def internet_bypass_routes(routes: list[dict], path: str) -> list:
+    if path not in BYPASSABLE_PATHS:
+        return []
+    return [
+        {"name": r.get("name"), "address_prefix": r.get("address_prefix")}
+        for r in routes
+        if r.get("next_hop_type") == "Internet"
+    ]
 
 
 def forced_through_appliance(prefix: str, routes: list[dict]) -> bool:
@@ -386,7 +429,9 @@ def subnet_record(
             "next_hop_type": hop_type,
             "next_hop_ip_addresses": route.get("next_hop_ip_addresses", []) if route else [],
             "next_hop_resource_id": hub_hop,
+            "user_defined_prefixes": route["address_prefixes"] if route else [],
         },
+        "internet_bypass_routes": internet_bypass_routes(routes, path),
         "virtual_hub_id": hub.get("virtual_hub_id"),
         "virtual_hub_private_traffic_next_hop": hub.get("private_next_hop"),
         "appliance_owner": owner,
@@ -470,9 +515,29 @@ def network_interface_record(nic: dict, path_by_subnet: dict) -> dict:
     }
 
 
+def policy_threat_intel_mode(policy_id: str, policies_by_id: dict):
+    """(mode, chain resolved): the strictest threat-intel mode along a policy's base_policy chain.
+
+    A child policy inherits its parent's mode and may only tighten it. With a parent out of reach, only Deny is certain.
+    """
+    modes, seen, resolved = [], set(), True
+    while policy_id and arm_id_key(policy_id) not in seen:
+        seen.add(arm_id_key(policy_id))
+        policy = policies_by_id.get(arm_id_key(policy_id))
+        if policy is None:
+            resolved = False
+            break
+        modes.append(policy.get("threat_intel_mode"))
+        policy_id = policy.get("base_policy_id")
+    known = [m for m in modes if m in THREAT_INTEL_STRICTNESS]
+    mode = max(known, key=THREAT_INTEL_STRICTNESS.get) if known else None
+    return (mode if resolved or mode == "Deny" else None), resolved
+
+
 def firewall_record(firewall: dict, policies_by_id: dict, subnets: list[dict]) -> dict:
     policy_id = firewall.get("firewall_policy_id")
     policy = policies_by_id.get(arm_id_key(policy_id)) if policy_id else None
+    chain_mode, chain_resolved = policy_threat_intel_mode(policy_id, policies_by_id) if policy_id else (None, None)
     configs = firewall.get("ip_configurations") or []
     ips = {c["private_ip_address"] for c in configs if c.get("private_ip_address")}
     if firewall.get("hub_private_ip_address"):
@@ -492,13 +557,12 @@ def firewall_record(firewall: dict, policies_by_id: dict, subnets: list[dict]) -
         "private_ip_addresses": sorted(ips),
         "threat_intel_mode": firewall.get("threat_intel_mode"),
         "firewall_policy_id": policy_id,
-        "firewall_policy_resolved": (policy is not None) if policy_id else None,
+        "firewall_policy_resolved": chain_resolved,
+        "policy_base_policy_id": policy.get("base_policy_id") if policy else None,
         "policy_threat_intel_mode": policy.get("threat_intel_mode") if policy else None,
         "policy_intrusion_detection_mode": policy.get("intrusion_detection_mode") if policy else None,
         "policy_sku_tier": policy.get("sku_tier") if policy else None,
-        "effective_threat_intel_mode": (
-            policy.get("threat_intel_mode") if policy else None
-        ) if policy_id else firewall.get("threat_intel_mode"),
+        "effective_threat_intel_mode": chain_mode if policy_id else firewall.get("threat_intel_mode"),
         "routed_workload_subnets": sum(
             1 for s in subnets
             if not s["platform_subnet"] and key in {arm_id_key(i) for i in s["appliance_firewall_ids"]}
@@ -534,6 +598,7 @@ def summarize(
             1 for s in workload if s["appliance_owner"] == "azure_firewall"
         ),
         "workload_subnets_via_virtual_hub": sum(1 for s in workload if s["default_route"]["source"] == "virtual_hub"),
+        "workload_subnets_with_internet_bypass_routes": sum(1 for s in workload if s["internet_bypass_routes"]),
         "workload_subnets_with_service_endpoints": sum(1 for s in workload if s["service_endpoints"]),
         "workload_subnets_with_unrouted_internal_prefixes": sum(
             1 for s in workload if s["unrouted_internal_prefixes"]
@@ -613,7 +678,10 @@ def unresolved_spokes(vnets: list[dict], peers_by_vnet: dict, hubs: list[dict]) 
 # --- collection (lazy azure imports) ---
 
 def new_hub_search() -> dict:
-    return {"spokes_needing_search": 0, "subscriptions_searched": [], "spokes_found": 0, "failures": []}
+    return {
+        "spokes_needing_search": 0, "max_subscriptions": None, "subscriptions_searched": [],
+        "subscriptions_over_limit": 0, "spokes_found": 0, "failures": [],
+    }
 
 
 def _attempt(search: dict, operation: str, fn, default):
@@ -625,11 +693,18 @@ def _attempt(search: dict, operation: str, fn, default):
         return default
 
 
-def remote_virtual_hubs(subscription_ids, network_client, unresolved: dict, search: dict) -> list:
-    """Hubs in other subscriptions that connect an unresolved spoke; each spoke found leaves `unresolved`."""
+def remote_virtual_hubs(
+    subscription_ids: list, network_client, unresolved: dict, search: dict, limit: int = DEFAULT_SEARCH_LIMIT
+) -> list:
+    """Hubs in other subscriptions that connect an unresolved spoke; each spoke found leaves `unresolved`.
+
+    A hub found here keeps only its connections to those spokes: the rest are another subscription's network.
+    """
     names = {n.lower() for n in unresolved.values()}
+    search["max_subscriptions"] = limit
+    search["subscriptions_over_limit"] = max(len(subscription_ids) - limit, 0)
     hubs = []
-    for sub in subscription_ids:
+    for sub in subscription_ids[:limit]:
         if not unresolved:
             break
         search["subscriptions_searched"].append(sub)
@@ -643,7 +718,11 @@ def remote_virtual_hubs(subscription_ids, network_client, unresolved: dict, sear
                 search, f"network.hub_virtual_network_connections.list({name})",
                 lambda: list(client.hub_virtual_network_connections.list(rg, name)), [],
             )
-            if not any(arm_id_key(model_attr(model_attr(c, "remote_virtual_network"), "id")) in unresolved for c in connections):
+            connections = [
+                c for c in connections
+                if arm_id_key(model_attr(model_attr(c, "remote_virtual_network"), "id")) in unresolved
+            ]
+            if not connections:
                 continue
             record = project_virtual_hub(
                 hub,
@@ -735,6 +814,7 @@ def collect(subscription_id, cred, collector: Collector):
             lambda sub: NetworkManagementClient(credential=cred, subscription_id=sub, **arm_client_kwargs()),
             unresolved,
             search,
+            int_config(SEARCH_LIMIT_ENV, DEFAULT_SEARCH_LIMIT),
         )
     return (vnets, peers_by_vnet, tables, nics, firewalls, policies, hubs), search
 

@@ -64,7 +64,9 @@ evidence_set:
     AzureFirewallManagementSubnet and RouteServerSubnet are left out on both ends),
     the source subnet's NSG outbound rules and this subnet's NSG inbound rules,
     custom and default, are each walked in priority order. An Allow decides once it
-    covers every port (protocol any or TCP) and touches both address ranges; a Deny
+    covers every port (protocol any or TCP; a rule's port ranges are merged, so
+    0-1023 plus 1024-65535 counts, and port 0 is not needed) and touches both
+    address ranges; a Deny
     decides only once it covers every port and protocol and all of both ranges
     (the VirtualNetwork tag, * and 0.0.0.0/0 cover any subnet of the VNet; CIDRs
     are matched, adjacent ones merged). A subnet with no NSG does not filter. The
